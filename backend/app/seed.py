@@ -55,10 +55,16 @@ def seed(engine, settings: Settings):
         session.flush()
         remove_legacy_demo(session)
         queue_seeds = [(1, 'Billing'), (2, 'Technical Support'), (3, 'General Support')]
+        created_queues = False
         for identifier, name in queue_seeds:
             if not session.get(Queue, identifier):
                 session.add(Queue(id=identifier, name=name))
+                created_queues = True
         session.flush()
+        if created_queues and engine.dialect.name == 'postgresql':
+            # Explicit bootstrap IDs do not advance a Postgres SERIAL sequence.
+            session.exec(text("SELECT setval(pg_get_serial_sequence('queue', 'id'), "
+                              "GREATEST((SELECT MAX(id) FROM queue), nextval(pg_get_serial_sequence('queue', 'id'))))"))
         queues = {name: session.get(Queue, identifier) for identifier, name in queue_seeds}
         for slug, name, destination, keywords in CATEGORY_SEEDS:
             if not session.exec(select(Category).where(Category.slug == slug)).first():

@@ -28,6 +28,9 @@ def test_full_workflow_and_restart_with_real_postgres():
             auth = client.post('/api/auth/login', json={'username': 'admin', 'password': 'test-password'}).json()
             client.headers['X-CSRF-Token'] = auth['csrf_token']
             assert client.get('/api/articles').json() == []
+            created_queue = client.post('/api/queues', json={'name': 'User entered queue'})
+            assert created_queue.status_code == 201, created_queue.text
+            assert created_queue.json()['id'] > 3
             for article in [
                 {'title': 'Billing guidance', 'body': 'Duplicate charges belong to Billing. Review the payment request.'},
                 {'title': 'Urgency policy', 'body': 'Routine billing requests have normal priority.', 'is_policy': True},
