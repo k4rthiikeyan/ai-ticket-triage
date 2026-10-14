@@ -83,7 +83,7 @@ def ticket_data(ticket, session):
     return data
 
 
-def create_app(settings: Settings | None = None, gateway=None, store=None):
+def create_app(settings: Settings | None = None, gateway=None, store=None, frontend_dir=None):
     settings = settings or get_settings()
     engine = make_engine(settings)
 
@@ -476,15 +476,18 @@ def create_app(settings: Settings | None = None, gateway=None, store=None):
             raise HTTPException(502, readable_error(error)) from error
 
     app.include_router(router)
-    dist = Path(__file__).resolve().parents[2] / 'frontend' / 'dist'
+    dist = Path(frontend_dir) if frontend_dir is not None else Path(__file__).resolve().parents[2] / 'frontend' / 'dist'
     if (dist / 'index.html').is_file() and (dist / 'assets').is_dir():
         app.mount('/assets', StaticFiles(directory=dist / 'assets'), name='assets')
+        index_file = dist / 'index.html'
+        index_etag = '"' + hashlib.sha256(index_file.read_bytes()).hexdigest() + '"'
 
         @app.get('/{path:path}', include_in_schema=False)
         def frontend(path: str):
             if path.startswith('api/'):
                 raise HTTPException(404, 'Endpoint not found')
-            return FileResponse(dist / 'index.html')
+            return FileResponse(index_file, headers={'Cache-Control': 'no-store',
+                'Vercel-CDN-Cache-Control': 'no-store', 'ETag': index_etag})
     return app
 
 
