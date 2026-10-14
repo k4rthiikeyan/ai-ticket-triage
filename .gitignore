@@ -15,3 +15,5 @@ frontend/playwright-report/
 *.egg-info/
 *.tsbuildinfo
 artifacts/
+.agents/
+skills-lock.json

@@ -16,3 +16,5 @@ frontend/test-results
 frontend/playwright-report
 frontend/e2e
 *.zip
+.agents
+skills-lock.json
