@@ -44,6 +44,8 @@ Indexing and triage finish **inside the HTTP request**, avoiding background thre
 
 ## First use: bring your own knowledge
 
+For a public project review, set `PUBLIC_DEMO_ENABLED=true` in Vercel Production and redeploy. The login page displays the dedicated `demo` / `try-triage` credentials and a **Try the demo** button. Visitors can try tickets, articles, and free-model triage in the shared workspace; category/queue configuration and provider diagnostics require the administrator. The administrator password is never published. The page labels demo content as public, so use non-sensitive examples. Set the flag to `false` to disable both demo sign-in and existing demo sessions. This adds a visitor account, not seeded tickets or articles.
+
 1. Open **Knowledge base** and write or paste a support article describing your product, supported categories, and routing guidance. Save it.
 2. Create a separate article, check **Use as urgency policy**, and define when your team assigns `low`, `normal`, `high`, or `urgent`. Save it. No default policy is fabricated.
 3. Click **Rebuild index**. This sends article chunks to OpenRouter's embedding endpoint and stores the vectors in your database.

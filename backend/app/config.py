@@ -2,11 +2,15 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr, Field, AliasChoices, field_validator
 
+DEMO_USERNAME = 'demo'
+DEMO_PASSWORD = 'try-triage'
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=('.env', '.env.local'), extra='ignore', populate_by_name=True)
     admin_username: str = 'admin'
     admin_password: str = ''
+    public_demo_enabled: bool = False
     database_url: str = Field(default='sqlite:///./data/triage.db', validation_alias=AliasChoices('DATABASE_URL', 'POSTGRES_URL'))
     openrouter_api_key: SecretStr = SecretStr('')
     openrouter_embedding_api_key: SecretStr = SecretStr('')
@@ -20,6 +24,13 @@ class Settings(BaseSettings):
     auto_migrate: bool = True
     cookie_secure: bool = False
     session_hours: int = 8
+
+    @field_validator('admin_username')
+    @classmethod
+    def reserve_demo_username(cls, value):
+        if value.casefold() == DEMO_USERNAME:
+            raise ValueError('The demo username is reserved for public demo access. Choose another administrator username.')
+        return value
 
     @field_validator('generation_model', 'embedding_model')
     @classmethod

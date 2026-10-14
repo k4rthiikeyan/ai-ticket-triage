@@ -1,4 +1,35 @@
 import { test, expect } from "@playwright/test";
+
+test("public credentials allow a demo visit with administrator settings protected", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const demo = page.getByRole("region", { name: "Public demo access" });
+  await expect(demo).toContainText("demo");
+  await expect(demo).toContainText("try-triage");
+  await page.getByRole("button", { name: "Try the demo", exact: true }).click();
+  await expect(page.getByText("Demo visitor", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Add category" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add queue" })).toBeDisabled();
+  await page.getByRole("link", { name: "All tickets", exact: false }).click();
+  await page.getByRole("button", { name: "New ticket", exact: true }).click();
+  await page
+    .getByLabel("Subject", { exact: true })
+    .fill("A visitor request " + Date.now());
+  await page
+    .getByLabel("Customer request")
+    .fill("This is a request typed by a demo visitor to try the workspace.");
+  await page
+    .getByRole("button", { name: "Create ticket", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Customer request", exact: true }),
+  ).toBeVisible();
+});
+
 test("operator creates a ticket, compares rules, confirms, notes, resolves, and sees audit history", async ({
   page,
 }) => {

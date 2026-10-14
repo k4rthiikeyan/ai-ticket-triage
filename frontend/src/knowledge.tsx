@@ -579,7 +579,7 @@ function TaxonomyEditor({
 }
 
 export function SettingsPage() {
-  const { taxonomy, system } = useWorkspace();
+  const { taxonomy, system, isDemo } = useWorkspace();
   const [editor, setEditor] = useState<Editor | null>(null);
   return (
     <>
@@ -597,6 +597,7 @@ export function SettingsPage() {
             </div>
             <button
               className="button small-button"
+              disabled={isDemo}
               onClick={() => setEditor({ kind: "category" })}
             >
               <Plus size={14} />
@@ -620,6 +621,7 @@ export function SettingsPage() {
                 </div>
                 <button
                   className="button small-button"
+                  disabled={isDemo}
                   onClick={() => setEditor({ kind: "category", item: c })}
                 >
                   Edit
@@ -637,6 +639,7 @@ export function SettingsPage() {
             <button
               className="icon-button"
               aria-label="Add queue"
+              disabled={isDemo}
               onClick={() => setEditor({ kind: "queue" })}
             >
               <Plus size={18} />
@@ -654,6 +657,7 @@ export function SettingsPage() {
                 </div>
                 <button
                   className="button small-button"
+                  disabled={isDemo}
                   onClick={() => setEditor({ kind: "queue", item: q })}
                 >
                   Edit
@@ -665,8 +669,9 @@ export function SettingsPage() {
       </div>
       <div className="info-strip settings-info">
         <AlertTriangle size={17} />
-        Taxonomy changes invalidate earlier recommendations and require an index
-        rebuild. Archived records remain in ticket history.
+        {isDemo
+          ? "Category and queue settings are managed by the administrator. You can try tickets, articles, and triage in the demo."
+          : "Taxonomy changes invalidate earlier recommendations and require an index rebuild. Archived records remain in ticket history."}
       </div>
       <section className="card runtime-card">
         <div className="card-header">
@@ -695,7 +700,9 @@ export function SettingsPage() {
           </div>
           <div>
             <dt>Operator account</dt>
-            <dd>One configured administrator</dd>
+            <dd>
+              {isDemo ? "Public demo visitor" : "Workspace administrator"}
+            </dd>
           </div>
         </dl>
         <div className="card-footer">

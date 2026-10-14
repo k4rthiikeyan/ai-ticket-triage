@@ -1805,6 +1805,45 @@ tbody tr:hover {
   text-align: center;
   margin-top: 15px;
 }
+.demo-access {
+  margin: 22px 0;
+  padding: 18px;
+  border: 1px solid #c9dcd3;
+  border-radius: 12px;
+  background: #f0f7f3;
+}
+.demo-access > strong {
+  color: #205e4a;
+  font-size: 16px;
+}
+.demo-access p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 8px 0 12px;
+}
+.demo-access dl {
+  margin: 12px 0 16px;
+}
+.demo-access dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 8px 0;
+}
+.demo-access dt {
+  color: #52665d;
+  font-size: 12px;
+}
+.demo-access dd {
+  margin: 0;
+  color: #183f31;
+  font-size: 13px;
+}
+.demo-access .demo-access-note {
+  margin: 12px 0 0;
+  color: #53655c;
+  font-size: 11px;
+}
 .boot-error {
   position: fixed;
   bottom: 20px;
@@ -2223,6 +2262,13 @@ tbody tr:hover {
     transition: none !important;
   }
 }
-.semantic-search { margin-bottom: 24px; }
-.search-result + .search-result { border-top: 1px solid #e4e9e7; padding-top: 16px; }
-.search-result p { overflow-wrap: anywhere; }
+.semantic-search {
+  margin-bottom: 24px;
+}
+.search-result + .search-result {
+  border-top: 1px solid #e4e9e7;
+  padding-top: 16px;
+}
+.search-result p {
+  overflow-wrap: anywhere;
+}

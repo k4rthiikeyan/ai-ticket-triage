@@ -45,6 +45,7 @@ import { TicketsPage, TicketPage } from "./tickets";
 import { KnowledgePage, SettingsPage } from "./knowledge";
 
 type ContextValue = {
+  isDemo: boolean;
   taxonomy: Taxonomy;
   system: System | null;
   dashboard: DashboardData | null;
@@ -56,22 +57,53 @@ type ContextValue = {
 const WorkspaceContext = createContext<ContextValue>(null!);
 export const useWorkspace = () => useContext(WorkspaceContext);
 
-function Login({ onLogin }: { onLogin: (username: string) => void }) {
+function Login({
+  onLogin,
+}: {
+  onLogin: (username: string, isDemo: boolean) => void;
+}) {
   const [username, setUsername] = useState("admin"),
     [password, setPassword] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const [demo, setDemo] = useState<{
+    enabled: boolean;
+    username?: string;
+    password?: string;
+  } | null>(null);
+  useEffect(() => {
+    let live = true;
+    api<{ enabled: boolean; username?: string; password?: string }>(
+      "/auth/demo",
+    )
+      .then((data) => {
+        if (live) setDemo(data);
+      })
+      .catch(() => {
+        if (live)
+          setError(
+            "Demo access could not be loaded. Refresh the page or use your workspace credentials.",
+          );
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
   async function submit(e: FormEvent) {
     e.preventDefault();
+    await signIn(username, password);
+  }
+  async function signIn(loginUsername: string, loginPassword: string) {
     setBusy(true);
     setError("");
     try {
-      const data = await post<{ username: string; csrf_token: string }>(
-        "/auth/login",
-        { username, password },
-      );
+      const data = await post<{
+        username: string;
+        csrf_token: string;
+        is_demo: boolean;
+      }>("/auth/login", { username: loginUsername, password: loginPassword });
       setCsrf(data.csrf_token);
-      onLogin(data.username);
+      onLogin(data.username, Boolean(data.is_demo));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -115,8 +147,46 @@ function Login({ onLogin }: { onLogin: (username: string) => void }) {
       <section className="login-form">
         <div className="login-form-inner">
           <span className="eyebrow">YOUR SUPPORT WORKSPACE</span>
-          <h2>Welcome back</h2>
-          <p className="muted">Sign in to review your team’s requests.</p>
+          <h2>{demo?.enabled ? "Take a look around" : "Welcome back"}</h2>
+          <p className="muted">
+            {demo?.enabled
+              ? "Try the demo, or sign in with your workspace account."
+              : "Sign in to review your team’s requests."}
+          </p>
+          {demo?.enabled && demo.username && demo.password && (
+            <section className="demo-access" aria-label="Public demo access">
+              <strong>Explore the public demo</strong>
+              <p>No account needed. Try the workspace for yourself.</p>
+              <dl>
+                <div>
+                  <dt>Username</dt>
+                  <dd>
+                    <code>{demo.username}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Password</dt>
+                  <dd>
+                    <code>{demo.password}</code>
+                  </dd>
+                </div>
+              </dl>
+              <button
+                type="button"
+                className="button primary wide"
+                disabled={busy}
+                onClick={() => {
+                  void signIn(demo.username!, demo.password!);
+                }}
+              >
+                Try the demo <ArrowRight size={17} />
+              </button>
+              <p className="demo-access-note">
+                Shared public workspace. Use non-sensitive examples. Free AI
+                usage limits apply.
+              </p>
+            </section>
+          )}
           <form onSubmit={submit}>
             <label>
               Username
@@ -396,6 +466,7 @@ function DashboardPage() {
 
 export default function App() {
   const [user, setUser] = useState<string | null>(null),
+    [isDemo, setIsDemo] = useState(false),
     [booting, setBooting] = useState(true),
     [bootError, setBootError] = useState("");
   const [taxonomy, setTaxonomy] = useState<Taxonomy>({
@@ -423,11 +494,12 @@ export default function App() {
   }, []);
   useEffect(() => {
     let live = true;
-    api<{ username: string; csrf_token: string }>("/auth/me")
+    api<{ username: string; csrf_token: string; is_demo: boolean }>("/auth/me")
       .then((data) => {
         if (live) {
           setCsrf(data.csrf_token);
           setUser(data.username);
+          setIsDemo(Boolean(data.is_demo));
         }
       })
       .catch((e) => {
@@ -439,6 +511,7 @@ export default function App() {
       });
     const expire = () => {
       setUser(null);
+      setIsDemo(false);
       setJob(null);
       setCsrf("");
     };
@@ -500,6 +573,7 @@ export default function App() {
       await post("/auth/logout");
       setCsrf("");
       setUser(null);
+      setIsDemo(false);
       setJob(null);
       setDashboard(null);
       navigate("/");
@@ -508,6 +582,7 @@ export default function App() {
     }
   }
   const context = {
+    isDemo,
     taxonomy,
     system,
     dashboard,
@@ -526,9 +601,10 @@ export default function App() {
     return (
       <>
         <Login
-          onLogin={(username) => {
+          onLogin={(username, demoAccount) => {
             setBootError("");
             setUser(username);
+            setIsDemo(demoAccount);
           }}
         />
         {bootError && (
@@ -559,7 +635,9 @@ export default function App() {
             <span className="workspace-avatar">T</span>
             <div>
               <strong>Your support workspace</strong>
-              <span>Single-team workspace</span>
+              <span>
+                {isDemo ? "Shared public demo" : "Single-team workspace"}
+              </span>
             </div>
           </div>
           <div className="nav-label">WORKSPACE</div>
@@ -601,7 +679,7 @@ export default function App() {
               <span className="avatar">A</span>
               <div>
                 <strong>{user}</strong>
-                <span>Administrator</span>
+                <span>{isDemo ? "Demo visitor" : "Administrator"}</span>
               </div>
               <button
                 className="icon-button"
@@ -631,6 +709,13 @@ export default function App() {
             <span className="avatar small-avatar">A</span>
           </header>
           <main className="page-content">
+            {isDemo && (
+              <div className="info-strip">
+                <ShieldCheck size={17} />
+                Shared public demo: tickets and knowledge are visible to all
+                visitors. Use non-sensitive examples.
+              </div>
+            )}
             <ErrorBox message={workspaceError} />
             {workspaceError && (
               <button
@@ -666,7 +751,8 @@ export default function App() {
             </Routes>
             <footer className="page-footer">
               <span>
-                Triage Desk <span>·</span> Synthetic demo workspace
+                Triage Desk <span>·</span>{" "}
+                {isDemo ? "Public demo workspace" : "Support workspace"}
               </span>
               <a href="/api/docs" target="_blank" rel="noreferrer">
                 API documentation

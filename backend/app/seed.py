@@ -7,7 +7,7 @@ from sqlalchemy import delete, text
 from sqlmodel import Session, select
 from .models import (Admin, AppState, Queue, Category, Ticket, TicketRevision, Note,
                      Decision, Job, RecommendationRun, AuditEvent, Article, ArticleRevision)
-from .config import Settings
+from .config import Settings, DEMO_USERNAME, DEMO_PASSWORD
 
 CATEGORY_SEEDS = [
     ('billing', 'Billing', 'Billing', ['invoice', 'receipt', 'refund', 'duplicate charge', 'subscription', 'payment', 'pricing', 'seat cost', 'paid plan', 'billing', 'card declined']),
@@ -50,6 +50,9 @@ def seed(engine, settings: Settings):
                 raise ValueError('Set ADMIN_PASSWORD in .env or Render environment variables before first startup.')
             session.add(Admin(username=settings.admin_username,
                               password_hash=PasswordHash.recommended().hash(settings.admin_password)))
+        if settings.public_demo_enabled and not session.exec(select(Admin).where(Admin.username == DEMO_USERNAME)).first():
+            session.add(Admin(username=DEMO_USERNAME,
+                              password_hash=PasswordHash.recommended().hash(DEMO_PASSWORD)))
         if not session.get(AppState, 1):
             session.add(AppState())
         session.flush()

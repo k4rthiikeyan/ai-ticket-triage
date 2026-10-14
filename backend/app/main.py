@@ -16,7 +16,7 @@ from pwdlib import PasswordHash
 from sqlalchemy import or_, func, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
-from .config import Settings, get_settings
+from .config import Settings, get_settings, DEMO_USERNAME, DEMO_PASSWORD
 from .db import make_engine, migrate
 from .models import *
 from .schemas import *
@@ -42,11 +42,19 @@ def authenticated(request: Request, session: DB, csrf_header: Annotated[str | No
     login = session.get(LoginSession, token_hash(token)) if token else None
     if not login or login.expires_at <= now():
         raise HTTPException(401, 'Please sign in to continue.')
+    admin = session.get(Admin, login.admin_id)
+    if not admin or (admin.username == DEMO_USERNAME and not request.app.state.settings.public_demo_enabled):
+        raise HTTPException(401, 'Please sign in to continue.')
     if request.method not in ['GET', 'HEAD', 'OPTIONS']:
         csrf = csrf_header or ''
         if not secrets.compare_digest(csrf, login.csrf_token):
             raise HTTPException(403, 'Invalid CSRF token. Refresh the page and retry.')
     return login
+
+
+def administrator(session: DB, login: Annotated[LoginSession, Depends(authenticated)]):
+    if session.get(Admin, login.admin_id).username == DEMO_USERNAME:
+        raise HTTPException(403, 'This setting is managed by the workspace administrator. Demo users can try tickets and knowledge.')
 
 
 def found(session, model, identifier):
@@ -128,10 +136,17 @@ def create_app(settings: Settings | None = None, gateway=None, store=None):
     def health():
         return {'status': 'ok'}
 
+    @app.get('/api/auth/demo')
+    def demo_access():
+        if not settings.public_demo_enabled:
+            return {'enabled': False}
+        return {'enabled': True, 'username': DEMO_USERNAME, 'password': DEMO_PASSWORD}
+
     @app.post('/api/auth/login')
     def login(body: LoginBody, request: Request, response: Response, session: DB):
         admin = session.exec(select(Admin).where(Admin.username == body.username)).first()
-        if not admin or not PasswordHash.recommended().verify(body.password, admin.password_hash):
+        if (not admin or (admin.username == DEMO_USERNAME and not settings.public_demo_enabled)
+                or not PasswordHash.recommended().verify(body.password, admin.password_hash)):
             raise HTTPException(401, 'Username or password is incorrect.')
         old_token = request.cookies.get('triage_session')
         old_session = session.get(LoginSession, token_hash(old_token)) if old_token else None
@@ -144,13 +159,14 @@ def create_app(settings: Settings | None = None, gateway=None, store=None):
         session.commit()
         response.set_cookie('triage_session', token, httponly=True, secure=settings.cookie_secure,
                             samesite='strict', path='/api', max_age=settings.session_hours * 3600)
-        return {'username': admin.username, 'csrf_token': csrf}
+        return {'username': admin.username, 'csrf_token': csrf, 'is_demo': admin.username == DEMO_USERNAME}
 
     router = APIRouter(prefix='/api', dependencies=[Depends(authenticated)])
 
     @router.get('/auth/me')
     def me(session: DB, login: Annotated[LoginSession, Depends(authenticated)]):
-        return {'username': session.get(Admin, login.admin_id).username, 'csrf_token': login.csrf_token}
+        username = session.get(Admin, login.admin_id).username
+        return {'username': username, 'csrf_token': login.csrf_token, 'is_demo': username == DEMO_USERNAME}
 
     @router.post('/auth/logout')
     def logout(response: Response, session: DB, login: Annotated[LoginSession, Depends(authenticated)]):
@@ -179,7 +195,7 @@ def create_app(settings: Settings | None = None, gateway=None, store=None):
                 'busy': bool(session.exec(select(Job).where(Job.status.in_(['queued', 'running']), Job.created_at >= cutoff)).first()),
                 'jobs': session.exec(select(Job).order_by(Job.created_at.desc()).limit(5)).all()}
 
-    @router.post('/system/check-provider')
+    @router.post('/system/check-provider', dependencies=[Depends(administrator)])
     def check_provider(kind: Literal['embeddings', 'llm']):
         result = {'kind': kind, 'model': settings.embedding_model if kind == 'embeddings' else settings.generation_model,
                   'free_only': True}
@@ -208,7 +224,7 @@ def create_app(settings: Settings | None = None, gateway=None, store=None):
         return {'categories': session.exec(select(Category).order_by(Category.id)).all(),
                 'queues': session.exec(select(Queue).order_by(Queue.id)).all()}
 
-    @router.post('/queues', status_code=201)
+    @router.post('/queues', status_code=201, dependencies=[Depends(administrator)])
     def add_queue(body: QueueBody, session: DB):
         queue = Queue(**body.model_dump())
         session.add(queue)
@@ -218,7 +234,7 @@ def create_app(settings: Settings | None = None, gateway=None, store=None):
         session.refresh(queue)
         return queue
 
-    @router.patch('/queues/{identifier}')
+    @router.patch('/queues/{identifier}', dependencies=[Depends(administrator)])
     def update_queue(identifier: int, body: QueueBody, session: DB):
         queue = found(session, Queue, identifier)
         if not body.active and session.exec(select(Category).where(Category.active == True, Category.queue_id == identifier)).first():
@@ -231,7 +247,7 @@ def create_app(settings: Settings | None = None, gateway=None, store=None):
         session.refresh(queue)
         return queue
 
-    @router.post('/categories', status_code=201)
+    @router.post('/categories', status_code=201, dependencies=[Depends(administrator)])
     def add_category(body: CategoryBody, session: DB):
         queue = found(session, Queue, body.queue_id)
         if body.active and not queue.active:
@@ -244,7 +260,7 @@ def create_app(settings: Settings | None = None, gateway=None, store=None):
         session.refresh(category)
         return category
 
-    @router.patch('/categories/{identifier}')
+    @router.patch('/categories/{identifier}', dependencies=[Depends(administrator)])
     def update_category(identifier: int, body: CategoryBody, session: DB):
         category = found(session, Category, identifier)
         queue = found(session, Queue, body.queue_id)

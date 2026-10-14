@@ -8,5 +8,5 @@ from tests.conftest import FakeGateway, FakeStore
 Path('data').mkdir(exist_ok=True)
 temporary = TemporaryDirectory(prefix='browser-', dir='data')
 settings = Settings(database_url='sqlite:///' + (Path(temporary.name) / 'browser.db').resolve().as_posix(),
-                    admin_password='test-password', _env_file=None)
+                    admin_password='test-password', public_demo_enabled=True, _env_file=None)
 app = create_app(settings, gateway=FakeGateway(), store=FakeStore())
