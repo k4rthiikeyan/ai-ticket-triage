@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 from .models import KnowledgeChunk
 from .schemas import GeneratedTriage
 
-PROMPT_VERSION = 'triage-openrouter-v2'
+PROMPT_VERSION = 'triage-openrouter-free-v3'
 
 
 def split_text(text: str, cap: int = 1200, overlap: int = 200) -> list[str]:
@@ -58,18 +58,23 @@ class OpenRouterGateway:
         try:
             self._key()
             self._key(embedding=True)
-            return {'available': True, 'message': 'OpenRouter keys configured. Requests verify provider access.'}
+            return {'available': True, 'message': 'Free OpenRouter models configured. Paid routing is blocked; requests verify free-provider access.'}
         except OpenRouterError as error:
             return {'available': False, 'message': str(error)}
 
     def _request(self, path, payload, embedding=False):
+        model = payload.get('model', '')
+        if not isinstance(model, str) or not model.endswith(':free') or '/' not in model:
+            raise OpenRouterError('Paid models are blocked. Choose an OpenRouter model ID ending in :free.')
+        payload = {**payload, 'provider': {**payload.get('provider', {}),
+            'max_price': {'prompt': 0, 'completion': 0, 'request': 0}}}
         response = self.client.post(path, json=payload, headers={
             'Authorization': 'Bearer ' + self._key(embedding), 'X-Title': 'Triage Desk'})
         if response.is_error:
-            messages = {401: 'API key is invalid.', 402: 'Insufficient credits. Add credits to your OpenRouter account.',
+            messages = {401: 'API key is invalid.', 402: 'Free request refused. Check the key budget and free-model access. No paid fallback was attempted.',
                         403: 'Access denied. Check API-key and provider permissions.',
                         404: 'Model unavailable. Check the configured model ID.',
-                        429: 'Rate limit reached. Wait and retry.'}
+                        429: 'Free-model quota or rate limit reached. Wait and retry; rules and manual decisions remain available.'}
             raise OpenRouterError('OpenRouter: ' + messages.get(response.status_code,
                 f'Request failed (HTTP {response.status_code}). Check model availability and structured-output support.'))
         try:
@@ -101,6 +106,7 @@ class OpenRouterGateway:
     def generate(self, messages, schema):
         response = self._request('chat/completions', {
             'model': self.settings.generation_model, 'messages': messages, 'temperature': 0,
+            'reasoning': {'enabled': False},
             'max_tokens': 1800, 'stream': False, 'provider': {'require_parameters': True},
             'response_format': {'type': 'json_schema', 'json_schema': {
                 'name': 'ticket_triage', 'strict': True, 'schema': schema}}})

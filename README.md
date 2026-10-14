@@ -2,21 +2,36 @@
 
 A support-ticket triage prototype using **OpenRouter embeddings for RAG search** and **OpenRouter chat completions for the LLM**. Users write their own knowledge and tickets. Suggestions include exact source quotes and become final only after human confirmation.
 
+The prototype is configured for **zero-cost AI and free hosting plans**:
+
+- Embeddings: `nvidia/nemotron-3-embed-1b:free` through OpenRouter.
+- LLM: `nvidia/nemotron-3-super-120b-a12b:free` through OpenRouter, with JSON-schema structured output.
+- Hosting: **Vercel Hobby**, for a personal, non-commercial prototype.
+- Database: **Neon Free**, with PostgreSQL and stored embeddings.
+
+Both model IDs must end in `:free`. The server rejects paid IDs and automatic model routers, and every AI request sets a zero-price limit for input tokens, output tokens, and per-request fees. There is no paid model fallback. Only one OpenRouter key is needed; no NVIDIA key or credit purchase is required for these free model variants.
+
+Free plans have usage limits. OpenRouter currently documents 20 requests per minute and 50 requests per day for free variants on accounts that have not bought credits. Providers can impose additional limits or become unavailable. Indexing, searching, and triage consume API requests. Quota errors stay visible, and rules comparison/manual decisions remain available. Vercel Hobby and Neon Free also have usage allowances: stay on their free plans and wait for quota resets rather than upgrading. This configuration is for a bounded prototype, not unlimited free service.
+
+Sources: [NVIDIA free embeddings](https://openrouter.ai/nvidia/nemotron-3-embed-1b:free), [NVIDIA free LLM](https://openrouter.ai/nvidia/nemotron-3-super-120b-a12b:free), [OpenRouter free-model limits](https://openrouter.ai/docs/api_reference/limits), [Vercel Hobby](https://vercel.com/docs/plans/hobby), [Neon Free](https://neon.com/pricing).
+
 There are **no seeded tickets, articles, or fictional product policies**. The administrator and editable category/queue defaults are configuration only. Older installations automatically remove tagged demo tickets and unchanged original demo articles; user-created tickets and edited articles are preserved. The old synthetic evaluation datasets have been removed.
 
 ## Deploy from GitHub to Vercel
 
 Vercel supports this FastAPI backend and React frontend as one project. `pyproject.toml` selects `backend.app.main:app`, and `vercel.json` builds the frontend and allows a 300-second function. Use the **repository root** as the Vercel Root Directory.
 
-1. Push this repository to GitHub and import it in Vercel. Select the **FastAPI** framework preset if it is not detected automatically. Keep the checked-in Build Command; leave Output Directory unset.
-2. Create a hosted **Neon PostgreSQL** database through Vercel's Storage/Marketplace flow and connect it to this project. Use its **pooled connection URL**, with TLS enabled. The backend accepts either `DATABASE_URL` or the Marketplace's `POSTGRES_URL`. If both exist, `DATABASE_URL` wins. Do not set a SQLite URL on Vercel.
+1. Import this GitHub repository into your **Vercel Hobby** account. Select the **FastAPI** framework preset if it is not detected automatically. Keep the checked-in Build Command; leave Output Directory unset. Use the free `vercel.app` address; a purchased domain is unnecessary.
+2. Create a hosted **Neon PostgreSQL database on the Free plan** through Vercel's Storage/Marketplace flow and connect it to this project. If the integration does not offer a Free plan, create the database directly on [Neon Free](https://neon.com/pricing) and set its URL manually. Use its **pooled connection URL**, with TLS enabled. The backend accepts either `DATABASE_URL` or the Marketplace's `POSTGRES_URL`. If both exist, `DATABASE_URL` wins. Do not set a SQLite URL on Vercel.
 3. Before deploying, configure these backend environment variables in Vercel for Production and the Preview environments you will use:
 
    - `DATABASE_URL`: the pooled PostgreSQL URL, unless `POSTGRES_URL` is already supplied by the integration.
-   - `OPENROUTER_API_KEY`: your OpenRouter key with available credits.
+   - `OPENROUTER_API_KEY`: your OpenRouter key; the selected `:free` models do not require buying credits.
    - `ADMIN_USERNAME`: your desired username (default `admin`).
    - `ADMIN_PASSWORD`: a strong password of your choosing.
    - `COOKIE_SECURE=true`: required for HTTPS cookies on the deployment.
+   - `GENERATION_MODEL=nvidia/nemotron-3-super-120b-a12b:free`: replace any earlier paid model setting.
+   - `EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b:free`: replace any earlier paid embedding setting.
 
 4. Deploy or redeploy after setting the variables. Startup runs Alembic migrations and creates the administrator once. Database migrations and administrator bootstrap are serialized across instances with PostgreSQL transaction locks. `/api/health` should return `{"status":"ok"}`.
 5. Open the deployment, sign in with your configured credentials, and follow the first-use steps below.
@@ -51,9 +66,9 @@ Copy-Item .env.example .env
 
 Open **http://127.0.0.1:8000**. Local development uses SQLite at ignored `data/triage.db`, including the stored embeddings. The same SQL models and migrations support PostgreSQL on Vercel. For separate frontend development, run `npm run dev` in `frontend`; Vite proxies `/api` to port 8000.
 
-`.env` and `.env.local` are ignored. Real keys never belong in the frontend or repository. An optional `OPENROUTER_EMBEDDING_API_KEY` can use a different key for embeddings; leaving it blank uses `OPENROUTER_API_KEY` for both APIs. Defaults are `openai/gpt-4.1-mini` for generation and `openai/text-embedding-3-small` for embeddings. The generation model must support JSON-schema structured outputs. Routing requires support for the requested parameters.
+`.env` and `.env.local` are ignored. Real keys never belong in the frontend or repository. An optional `OPENROUTER_EMBEDDING_API_KEY` can use a different key for embeddings; leaving it blank uses `OPENROUTER_API_KEY` for both APIs. Defaults are the free NVIDIA models listed above. Alternate models must have a `:free` suffix, and the generation model must support JSON-schema structured outputs. Routing requires support for the requested parameters. Paid settings from older versions now fail validation instead of making a billed request. After changing the embedding model, rebuild any existing knowledge index.
 
-The environment template documents the remaining settings. `INFERENCE_TIMEOUT` defaults to 60 seconds per provider call, and `JOB_TIMEOUT` defaults to 240 seconds. The OpenRouter status reports whether keys are configured; actual requests verify authentication, credits, and provider availability. Missing keys and provider failures produce visible errors without a silent fallback.
+The environment template documents the remaining settings. `INFERENCE_TIMEOUT` defaults to 60 seconds per provider call, and `JOB_TIMEOUT` defaults to 240 seconds. The OpenRouter status reports whether keys are configured; actual requests verify authentication, free quotas, and provider availability. Missing keys and provider failures produce visible errors without a paid fallback. Reasoning is disabled for the short structured triage response to keep it within the prototype request budget.
 
 `ADMIN_USERNAME` and `ADMIN_PASSWORD` bootstrap the first administrator only; changing them does not replace an existing account. Use a dedicated database for this prototype. If your database account cannot run migrations, migrate once with appropriate credentials using `python -m backend.app.cli init`, then set `AUTO_MIGRATE=false` for the runtime account.
 
@@ -74,6 +89,6 @@ GitHub Actions also runs the complete backend flow against a disposable PostgreS
 
 ## References
 
-- [OpenRouter embeddings model](https://openrouter.ai/openai/text-embedding-3-small)
+- [OpenRouter free NVIDIA embeddings](https://openrouter.ai/nvidia/nemotron-3-embed-1b:free)
 - [OpenRouter structured outputs](https://openrouter.ai/docs/guides/features/structured-outputs)
 - [FastAPI on Vercel](https://vercel.com/docs/frameworks/backend/fastapi)

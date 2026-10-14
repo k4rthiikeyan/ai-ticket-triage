@@ -17,7 +17,8 @@ def test_openrouter_embedding_payload_order_and_separate_key():
     def handler(request):
         assert request.url.path == '/api/v1/embeddings'
         assert request.headers['Authorization'] == 'Bearer test-embedding-key'
-        assert json.loads(request.content) == {'model': 'openai/text-embedding-3-small', 'input': ['first', 'second'], 'encoding_format': 'float'}
+        assert json.loads(request.content) == {'model': 'nvidia/nemotron-3-embed-1b:free', 'input': ['first', 'second'],
+            'encoding_format': 'float', 'provider': {'max_price': {'prompt': 0, 'completion': 0, 'request': 0}}}
         return httpx.Response(200, json={'data': [{'index': 1, 'embedding': [0., 1.]}, {'index': 0, 'embedding': [1., 0.]}]})
     instance = gateway(handler, openrouter_embedding_api_key='test-embedding-key')
     try:
@@ -33,8 +34,9 @@ def test_openrouter_generation_uses_strict_schema_and_main_key():
         assert request.url.path == '/api/v1/chat/completions'
         assert request.headers['Authorization'] == 'Bearer test-server-key'
         payload = json.loads(request.content)
-        assert payload['model'] == 'openai/gpt-4.1-mini'
-        assert payload['provider'] == {'require_parameters': True}
+        assert payload['model'] == 'nvidia/nemotron-3-super-120b-a12b:free'
+        assert payload['reasoning'] == {'enabled': False}
+        assert payload['provider'] == {'require_parameters': True, 'max_price': {'prompt': 0, 'completion': 0, 'request': 0}}
         assert payload['response_format']['json_schema'] == {'name': 'ticket_triage', 'strict': True, 'schema': schema}
         return httpx.Response(200, json={'choices': [{'finish_reason': 'stop', 'message': {'content': '{"abstain":true}'}}]})
     instance = gateway(handler)
@@ -88,5 +90,39 @@ def test_truncated_and_refused_generations_are_visible_errors(choice):
     try:
         with pytest.raises(OpenRouterError, match='truncated'):
             instance.generate([], {})
+    finally:
+        instance.close()
+
+
+@pytest.mark.parametrize('field, model', [
+    ('generation_model', 'openai/gpt-4.1-mini'),
+    ('embedding_model', 'openai/text-embedding-3-small'),
+    ('generation_model', 'openrouter/auto'),
+])
+def test_paid_models_and_automatic_paid_routing_are_rejected(field, model):
+    with pytest.raises(ValueError, match='Paid models are blocked'):
+        Settings(**{field: model}, _env_file=None)
+
+
+def test_paid_model_cannot_bypass_runtime_guard():
+    def forbidden(request):
+        pytest.fail('A paid model request must never reach the network.')
+    instance = gateway(forbidden)
+    try:
+        instance.settings = instance.settings.model_copy(update={'generation_model': 'openai/gpt-4.1-mini'})
+        with pytest.raises(OpenRouterError, match='Paid models are blocked'):
+            instance.generate([], {})
+    finally:
+        instance.close()
+
+
+@pytest.mark.parametrize('status', [402, 429])
+def test_free_quota_errors_do_not_recommend_payment(status):
+    instance = gateway(lambda _: httpx.Response(status, json={'error': {'message': 'Provider quota'}}))
+    try:
+        with pytest.raises(OpenRouterError) as caught:
+            instance.embed(['request'])
+        assert 'add credits' not in str(caught.value).lower()
+        assert 'free' in str(caught.value).lower()
     finally:
         instance.close()

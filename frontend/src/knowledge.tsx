@@ -672,7 +672,7 @@ export function SettingsPage() {
         <div className="card-header">
           <div>
             <h2>OpenRouter inference</h2>
-            <p>Model settings are configured on the backend</p>
+            <p>Free models only · paid routing is blocked</p>
           </div>
           <Badge value={system?.provider.available ? "open" : "new"} />
         </div>
