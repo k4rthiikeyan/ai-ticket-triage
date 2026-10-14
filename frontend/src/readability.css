@@ -1,0 +1,341 @@
+/* Keep secondary labels legible while preserving a compact operational layout. */
+:root {
+  --muted: #66766c;
+}
+.table-scroll {
+  position: relative;
+}
+.eyebrow {
+  font-size: 11px;
+  color: #66786d;
+}
+.muted,
+.card-header p,
+.page-heading p {
+  color: #697a6f;
+}
+.card-header p {
+  font-size: 12px;
+}
+.subtle-label {
+  font-size: 10px;
+  color: #6e8173;
+}
+.metric-top {
+  font-size: 12px;
+  color: #63796a;
+}
+.metric .small {
+  font-size: 11px;
+}
+.workspace-switch strong {
+  font-size: 11px;
+}
+.workspace-switch div > span,
+.sidebar-user div span,
+.local-status > span:last-child {
+  font-size: 10px;
+  color: #6e8274;
+}
+.sidebar nav a {
+  font-size: 13px;
+  color: #64756a;
+}
+.sidebar nav a.active {
+  color: #155c49;
+}
+.nav-label,
+.breadcrumb,
+.ticket-id {
+  color: #6f8175;
+}
+.breadcrumb {
+  font-size: 12px;
+}
+.local-status strong,
+.local-pill {
+  font-size: 11px;
+  color: #667c6d;
+}
+.card-footer {
+  font-size: 11px;
+  color: #6a7e6f;
+}
+.workspace-banner strong {
+  font-size: 13px;
+  color: #365b42;
+}
+.workspace-banner p {
+  font-size: 11px;
+  color: #617c6b;
+}
+.bar-row > div:first-child {
+  font-size: 12px;
+  color: #62766a;
+}
+.priority-list > div {
+  font-size: 12px;
+}
+.priority-list > div > span:first-child {
+  color: #62786a;
+}
+.priority-list > div > .muted {
+  font-size: 11px;
+}
+th {
+  font-size: 11px;
+  color: #6c7e70;
+}
+td {
+  font-size: 12px;
+}
+.ticket-subject strong {
+  font-size: 12px;
+}
+.ticket-id {
+  font-size: 10px;
+}
+.badge {
+  font-size: 11px;
+}
+.badge.new {
+  color: #385f9a;
+}
+.badge.open {
+  color: #805f13;
+}
+.badge.resolved {
+  color: #39754d;
+}
+.badge.urgent {
+  color: #a24337;
+}
+.badge.high {
+  color: #825b25;
+}
+.badge.normal {
+  color: #3c639c;
+}
+.badge.low {
+  color: #39754b;
+}
+.badge.untriaged {
+  color: #627368;
+}
+.filter-bar select,
+.search-field input {
+  font-size: 12px;
+}
+.ticket-tabs > button {
+  font-size: 13px;
+}
+.pagination .small {
+  font-size: 11px;
+}
+.request-body {
+  font-size: 14px;
+  color: #526a5b;
+}
+.suggestion-grid .eyebrow {
+  font-size: 10px;
+}
+.suggestion-grid p {
+  font-size: 12px;
+  color: #667e6d;
+}
+.evidence-score {
+  font-size: 11px;
+  color: #3c7851;
+}
+.score-note {
+  font-size: 11px;
+  color: #687f6e;
+}
+.recommendation-meta {
+  font-size: 11px;
+  color: #6c8171;
+}
+.run-selector label,
+.run-selector select {
+  font-size: 11px;
+  color: #5e7567;
+}
+.triage-actions > .muted {
+  font-size: 11px;
+}
+.info-strip {
+  font-size: 12px;
+  color: #6d713e;
+}
+.source-card strong,
+.source-card blockquote {
+  font-size: 12px;
+  color: #55715e;
+}
+.source-meta,
+.run-footnote {
+  font-size: 10px;
+  color: #6b8070;
+}
+.source-card details {
+  font-size: 11px;
+  color: #597562;
+}
+.confirmed-data {
+  font-size: 12px;
+}
+.confirmed-data dt {
+  color: #69816e;
+}
+.confirmation-card label {
+  font-size: 12px;
+}
+.confirmation-card input,
+.confirmation-card select,
+.confirmation-card textarea {
+  font-size: 12px;
+}
+.confirmation-hint {
+  font-size: 11px;
+}
+.note-entry p {
+  color: #59735f;
+}
+.note-entry time {
+  font-size: 10px;
+  color: #647b69;
+}
+.decision-entry strong,
+.decision-entry p {
+  font-size: 12px;
+}
+.decision-entry p,
+.decision-entry .small {
+  color: #627e69;
+}
+.decision-entry .small {
+  font-size: 10px;
+}
+.original-request,
+.audit-card > summary {
+  font-size: 12px;
+  color: #627b69;
+}
+.index-banner strong {
+  font-size: 13px;
+  color: #796926;
+}
+.index-banner p {
+  font-size: 12px;
+  color: #807640;
+}
+.index-banner.ready strong,
+.index-banner.ready p {
+  color: #4a7956;
+}
+.index-banner .subtle-label {
+  color: #797039;
+}
+.article-item strong {
+  font-size: 12px;
+  color: #58725e;
+}
+.article-item span {
+  font-size: 10px;
+  color: #6d8471;
+}
+.editor-help {
+  font-size: 12px;
+  color: #668064;
+}
+.article-textarea {
+  font-size: 13px;
+  color: #536f59;
+}
+.taxonomy-row strong {
+  font-size: 13px;
+}
+.taxonomy-row div > span {
+  font-size: 11px;
+  color: #637d64;
+}
+.runtime-card dt {
+  font-size: 12px;
+  color: #6b8069;
+}
+.runtime-card dd {
+  font-size: 13px;
+  color: #526e50;
+}
+.job-toast p {
+  font-size: 12px;
+  color: #58785c;
+}
+.job-toast strong {
+  font-size: 13px;
+}
+.job-toast a {
+  font-size: 11px;
+}
+.story-label {
+  color: #5d8166;
+  font-size: 10px;
+}
+.login-story > p {
+  color: #587a60;
+  font-size: 14px;
+}
+.story-cards strong {
+  font-size: 13px;
+  color: #56775a;
+}
+.story-cards span {
+  font-size: 12px;
+  color: #69866a;
+}
+.story-footer {
+  color: #647f61;
+  font-size: 11px;
+}
+.login-form label {
+  font-size: 12px;
+  color: #567152;
+}
+.demo-credentials,
+.demo-credentials code {
+  font-size: 12px;
+  color: #627d54;
+}
+.login-note {
+  font-size: 11px !important;
+  color: #6e825f;
+}
+.login-form input::placeholder {
+  color: #728570;
+}
+.checkbox-label {
+  color: #617966;
+}
+@media (max-width: 760px) {
+  .sidebar nav a {
+    font-size: 11px;
+  }
+  .filter-bar select {
+    font-size: 11px;
+  }
+  .ticket-tabs button {
+    font-size: 11px;
+  }
+  .page-heading p {
+    font-size: 12px;
+  }
+  .story-label {
+    font-size: 10px;
+  }
+  .login-story > p {
+    font-size: 13px;
+  }
+  .triage-actions > .muted {
+    font-size: 10px;
+  }
+}
