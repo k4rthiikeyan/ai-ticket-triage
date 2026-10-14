@@ -92,3 +92,7 @@ GitHub Actions also runs the complete backend flow against a disposable PostgreS
 - [OpenRouter free NVIDIA embeddings](https://openrouter.ai/nvidia/nemotron-3-embed-1b:free)
 - [OpenRouter structured outputs](https://openrouter.ai/docs/guides/features/structured-outputs)
 - [FastAPI on Vercel](https://vercel.com/docs/frameworks/backend/fastapi)
+
+## Provider connection checks
+
+An administrator can test the configured OpenRouter services with POST /api/system/check-provider?kind=embeddings or kind=llm, including the normal X-CSRF-Token header. Each explicit check sends one tiny request through the existing free-only gateway and creates no tickets, articles, or index entries. The response reports success or a safe provider error without returning API keys. These checks count toward free-model rate limits.
