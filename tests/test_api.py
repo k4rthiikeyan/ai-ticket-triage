@@ -28,6 +28,34 @@ def test_login_csrf_origin_and_logout(workspace):
     assert client.get('/api/tickets').status_code == 401
 
 
+def test_live_provider_check_requires_auth_and_csrf(workspace):
+    _, client, *_ = workspace
+    assert client.post('/api/system/check-provider?kind=embeddings').status_code == 401
+    response = client.post('/api/auth/login', json={'username': 'admin', 'password': 'test-password'})
+    assert response.status_code == 200
+    assert client.post('/api/system/check-provider?kind=embeddings').status_code == 403
+
+
+def test_live_provider_check_does_not_add_workspace_data(signed):
+    _, client, gateway, *_ = signed
+    tickets_before = client.get('/api/tickets').json()['total']
+    articles_before = client.get('/api/articles').json()
+    embedding = client.post('/api/system/check-provider?kind=embeddings').json()
+    assert embedding['available'] and embedding['dimensions'] == 3 and embedding['free_only']
+    gateway.raw = '{"connected":true}'
+    generation = client.post('/api/system/check-provider?kind=llm').json()
+    assert generation['available'] and generation['free_only']
+    assert client.get('/api/tickets').json()['total'] == tickets_before
+    assert client.get('/api/articles').json() == articles_before
+    gateway.failure = OpenRouterError('OpenRouter: Free-model quota or rate limit reached.')
+    failure = client.post('/api/system/check-provider?kind=embeddings').json()
+    assert not failure['available'] and 'quota' in failure['message']
+    gateway.failure = None
+    gateway.raw = 'not JSON'
+    assert not client.post('/api/system/check-provider?kind=llm').json()['available']
+    assert client.post('/api/system/check-provider?kind=other').status_code == 422
+
+
 def test_create_search_filter_and_validation(signed):
     app, client, *_ = signed
     before = client.get('/api/dashboard').json()['total']

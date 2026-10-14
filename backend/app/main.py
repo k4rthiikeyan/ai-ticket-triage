@@ -1,10 +1,11 @@
 import hashlib
+import json
 import secrets
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
 from threading import Lock
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from uuid import uuid4
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, Response, Query, Header
@@ -177,6 +178,30 @@ def create_app(settings: Settings | None = None, gateway=None, store=None):
                 'embedding_model': settings.embedding_model, 'provider': provider,
                 'busy': bool(session.exec(select(Job).where(Job.status.in_(['queued', 'running']), Job.created_at >= cutoff)).first()),
                 'jobs': session.exec(select(Job).order_by(Job.created_at.desc()).limit(5)).all()}
+
+    @router.post('/system/check-provider')
+    def check_provider(kind: Literal['embeddings', 'llm']):
+        result = {'kind': kind, 'model': settings.embedding_model if kind == 'embeddings' else settings.generation_model,
+                  'free_only': True}
+        try:
+            if kind == 'embeddings':
+                vectors = app.state.gateway.embed(['Connection check.'])
+                result['dimensions'] = len(vectors[0])
+            else:
+                schema = {'type': 'object', 'properties': {'connected': {'type': 'boolean', 'const': True}},
+                          'required': ['connected'], 'additionalProperties': False}
+                content = app.state.gateway.generate([
+                    {'role': 'user', 'content': 'Connection check only. Return a JSON object with connected set to true.'}
+                ], schema)
+                try:
+                    valid = json.loads(content) == {'connected': True}
+                except (ValueError, TypeError):
+                    valid = False
+                if not valid:
+                    raise ValueError('OpenRouter returned an invalid connection check response.')
+            return {**result, 'available': True}
+        except Exception as error:
+            return {**result, 'available': False, 'message': readable_error(error)}
 
     @router.get('/taxonomy')
     def taxonomy(session: DB):
