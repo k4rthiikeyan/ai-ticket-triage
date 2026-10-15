@@ -1,155 +1,292 @@
 # Triage Desk
 
-A support-ticket triage prototype using **OpenRouter embeddings for RAG search** and **OpenRouter chat completions for the LLM**. Users write their own knowledge and tickets. Suggestions include exact source quotes and become final only after human confirmation.
+### AI support that answers routine questions and brings people in when needed.
 
-**[Live demo](https://ai-ticket-triage-chi.vercel.app/)** — select **Try the demo**. Each browser receives an isolated workspace with **six labelled example articles and three example tickets**. Click **Rebuild index**, open a ticket, and run triage. You can edit the guidance or enter your own requests. Loading examples makes no AI calls; embeddings are generated only when you build the index.
+A full-stack support application with a customer enquiry portal and an administrator workspace. It retrieves approved knowledge, writes answers with cited sources, and sends sensitive or unsupported requests to a human. Completed answers remain reviewable and correctable.
 
-## Engineering highlights
+**[Open the live demo](https://ai-ticket-triage-chi.vercel.app/)** · **[Customer portal](https://ai-ticket-triage-chi.vercel.app/support)** · **[Deployment health](https://ai-ticket-triage-chi.vercel.app/api/health)**
 
-- **Traceable decisions:** exact-quote validation, article and ticket revisions, stale-result rejection, explicit acceptance/override, and audit history.
-- **Workspace isolation:** server-selected workspace membership scopes tickets, articles, search indexes, dashboards, and jobs. Guessing another visitor's record ID returns 404. Owner content is preserved separately.
-- **Bounded free usage:** atomic SQL counters work across server instances. Defaults are 40 AI requests per UTC day globally, 8 per minute globally, and 12 per demo workspace per UTC day. Index batches, query embeddings, and completions each count as requests. There is no paid fallback.
-- **Reproducible evaluation:** 24 hand-labelled fixtures covering five categories, all four priorities, unrelated/ambiguous requests, negation, and paraphrases. These fixtures never populate the live application.
-- **Verification:** backend tests, real PostgreSQL integration in CI, frontend tests, and Playwright browser workflows. Model transport is mocked in CI; live-provider results are reported separately.
+[Try both roles yourself](#try-both-roles-yourself) · [Run locally](#run-locally) · [Tech stack](#tech-stack) · [Engineering guide](docs/engineering.md)
 
-## Code organization and request flow
+## The idea
 
-`frontend → authenticated feature route → workspace-scoped service → PostgreSQL / OpenRouter → validated recommendation → human confirmation`
+Support teams repeatedly answer the same policy and how-to questions while account problems, security incidents, and exceptions need individual attention. A useful AI assistant should reduce repetitive work while leaving the team in control of customer outcomes.
 
-```text
-backend/app/
-  main.py             Application assembly, lifecycle, headers, frontend serving
-  dependencies.py     Authentication, CSRF, workspace access checks
-  routes/             Auth, tickets, knowledge, taxonomy, system endpoints
-  services/
-    provider.py       Free-only OpenRouter HTTP requests and validation
-    retrieval.py      Chunking, embedding snapshots, bounded cosine search
-    triage.py         Prompt, evidence validation, abstention, rules baseline
-    workspaces.py     Demo lifecycle, scoped state, expiry cleanup
-    usage.py          Atomic shared usage limits and provider admission
-    records.py        Revision invalidation, audit, presentation helpers
-  jobs.py             Serialized admission and recoverable request-bound jobs
-  models.py           SQL entities
-  schemas.py          Input and generated-output validation
-backend/migrations/   Versioned schema upgrades
-frontend/src/         Separate page, search, recommendation, and form components
-evaluation/           Isolated fixtures, runners, and measured results
-tests/                API, isolation, concurrency, migration, and RAG checks
+Triage Desk turns a maintained knowledge base into a first line of support. A customer asks a question; the application retrieves relevant passages and uses a language model to produce a structured answer, category, priority, and queue. The server validates the evidence before publishing. Routine, supported enquiries finish automatically; requests requiring judgment or action enter **Needs review**.
+
+The project goes beyond classification: an administrator can inspect an answer after completion, publish a correction, request a private AI revision, or reopen the ticket. The customer sees the conversation history, including updates, and can ask for more help.
+
+## See it in action
+
+**Administrator workspace — reviewing a completed ticket and publishing a correction**
+
+![Administrator reviewing a resolved refund-policy enquiry and its corrected customer answer](docs/images/admin-review.jpg)
+
+<details>
+<summary><strong>Customer view — original answer, support correction, and follow-up</strong></summary>
+
+<br>
+<img src="docs/images/customer-conversation.jpg" alt="Customer conversation preserving the AI answer and showing the support team's updated answer" width="620">
+
+</details>
+
+These screenshots show the deployed app using fictional test enquiries. Demo tickets are temporary, so ticket numbers will differ in a new session.
+
+## What it does
+
+- **Customer portal:** submit enquiries, read cited answers, revisit recent tickets, and reply to reopen an issue.
+- **Automatic answers:** retrieve indexed articles and publish grounded responses to routine informational questions.
+- **Human review:** escalate financial actions, identity recovery, security incidents, outages, explicit human requests, and requests without adequate evidence.
+- **Administrator controls:** audit completed answers, publish corrections, generate private revisions, adjust routing labels, and inspect the change history.
+- **Knowledge management:** maintain support articles and a separate urgency policy, rebuild the embedding index, and inspect retrieved passages.
+- **Isolated public demos:** each visitor receives a temporary workspace with six labelled example articles and three example tickets.
+- **Controlled AI usage:** shared database counters limit requests; configured models must use `:free` endpoints, with no paid model fallback.
+- **Triage comparison:** compare AI recommendations with a deterministic rules baseline and record manual classification decisions.
+
+## Try both roles yourself
+
+You can be the ticket raiser and the administrator. Use **two tabs in the same browser profile** so they share your isolated demo workspace. Separate browsers or private windows create different sessions.
+
+### 1. Start as the administrator
+
+1. Open the [live administrator workspace](https://ai-ticket-triage-chi.vercel.app/).
+2. Click **Try the demo**. The public demo credentials are `demo` / `try-triage`; no owner credentials are needed.
+3. Open **Knowledge base**. The demo includes fictional support guidance and an urgency policy. If an empty demo offers **Load starter examples**, click it first.
+4. Click **Rebuild index** and wait for it to finish. This prepares the articles for retrieval and consumes an embedding request.
+5. Keep the admin tab open. Open **Customer portal** in a second tab in the same browser.
+
+### 2. Raise an enquiry as the customer
+
+1. In the [customer portal](https://ai-ticket-triage-chi.vercel.app/support), select **New enquiry**.
+2. Enter a subject and one of the enquiries below, then click **Get help**.
+3. Note the ticket number so you can find it in the admin tab.
+4. For an automatic answer, expand **Sources behind this answer** to inspect its evidence. A review case displays **With support**.
+
+**Expected automatic answer — general refund policy**
+
+> After a refund has been approved, how long does it usually take to reach the original payment method? I only need the general policy, not an account lookup.
+
+With the starter knowledge indexed, the answer should explain the documented five-to-ten-business-day timeframe and cite the Billing article.
+
+**Expected automatic answer — technical reporting guidance**
+
+> What information should I include when reporting a technical problem? I only need the documented checklist, not an investigation of my account.
+
+The answer should give the reporting checklist from the starter guidance.
+
+**Expected admin review — request a financial action**
+
+> Please issue a refund for my most recent subscription payment.
+
+**Expected admin review — account recovery**
+
+> I lost my authenticator and cannot sign in. Please reset two-factor authentication on my account.
+
+**Expected admin review — unsupported information**
+
+> Exactly how many gigabytes of storage are included in the Enterprise plan?
+
+The starter knowledge does not establish a storage allowance, so this should go to support instead of inventing a number. Provider errors, exhausted quotas, or a missing/stale index can also send a routine question to review.
+
+### 3. Handle an enquiry as the administrator
+
+1. Return to the admin tab and open **Needs review**. Refresh the page if a new enquiry has not appeared yet.
+2. Open the ticket with the number you noted. Read the escalation explanation and expand **Customer conversation**.
+3. In **Correction or revision instructions**, write the complete response you want the customer to receive.
+4. Click **Publish correction**. This publishes your response and resolves the ticket as **Resolved by support**.
+5. Return to the customer tab, open the same enquiry under **Recent enquiries**, and click **Refresh** to see your response.
+
+The prototype records support replies; it does not execute refunds, reset accounts, or perform external actions. For those requests, explain the next support step rather than claiming an action was completed.
+
+### 4. Review and change an already resolved ticket
+
+1. Open **All tickets** in admin, filter for resolved tickets, and select the refund-policy enquiry from step 2. You can also use **Overview → Audit AI answers**.
+2. Inspect the latest answer and the sources in **Customer conversation**. Click **Mark reviewed** to record that you checked an acceptable answer.
+3. To change it, paste this complete replacement into **Correction or revision instructions**:
+
+   > Approved refunds usually take five to ten business days to reach the original payment method. If more than ten business days have passed, our Billing team should investigate the refund reference.
+
+4. Click **Publish correction**. Refresh the customer tab: the original answer remains visible, followed by the support team's **Updated answer**.
+5. Expand **Audit trail** in admin to inspect the recorded review and correction.
+
+For an AI-assisted edit, enter internal instructions such as “Make the answer shorter and retain the refund timeframe,” then click **Request AI changes**. Inspect the result marked **Draft · not visible to customer**, then click **Publish revised answer**. Revision instructions stay internal; **Publish correction** immediately publishes the text you entered.
+
+To reopen a ticket yourself, enter a reason and click **Reopen for review**. To try the customer route, type under **Still need help?** and click **Send to support team**; the ticket returns to human review.
+
+**Demo lifecycle:** the workspace expires after 30 minutes of inactivity. **End demo & delete data** removes its content; do this after your walkthrough. Keep the session active until you finish testing both roles. Use fictional, non-sensitive enquiries. The app displays the remaining AI allowance, and free-provider availability can vary.
+
+## Tech stack
+
+- **Frontend:** React 19, TypeScript, Vite, React Router, custom CSS, and Lucide icons.
+- **Backend:** Python 3.13, FastAPI, Pydantic validation, and Uvicorn.
+- **Data layer:** SQLModel / SQLAlchemy and Alembic migrations; SQLite locally, Neon PostgreSQL in the deployment.
+- **AI:** OpenRouter for embeddings and JSON-schema structured generation. Defaults are `nvidia/nemotron-3-embed-1b:free` and `nvidia/nemotron-3-super-120b-a12b:free`.
+- **Retrieval:** chunked articles, SQL-stored embeddings, bounded cosine-similarity search, and exact-quote evidence validation.
+- **Hosting:** Vercel serves the React build and FastAPI API as one project; persistent application data lives in PostgreSQL.
+- **Quality checks:** pytest, Vitest, Playwright, and GitHub Actions with a PostgreSQL integration service.
+
+## How an enquiry moves through the app
+
+```mermaid
+flowchart TD
+    A[Customer submits an enquiry] --> B[Check human-review gates]
+    B -->|Requires a person| H[Admin review queue]
+    B -->|Routine information| C[Retrieve indexed knowledge]
+    C --> D[Generate structured answer and routing labels]
+    D --> E{Valid evidence and supported answer?}
+    E -->|Yes| F[Publish cited answer and resolve]
+    E -->|No or provider failure| H
+    F --> G[Admin can audit any completed answer]
+    G --> I[Review, correct, revise, or reopen]
+    H --> I
+    I --> J[Publish support response or approved revision]
+    J --> K[Customer sees updated conversation]
+    F --> L[Customer follow-up]
+    K --> L
+    L --> H
 ```
 
-The frontend context lives separately from the application shell, avoiding page-to-shell import cycles. Page components own their UI state; the API client owns CSRF and session expiry handling. No microservices or extra paid infrastructure are needed for this scope.
+Embeddings find relevant passages; the language model writes the answer. The server checks output structure, taxonomy values, and quoted evidence. Version checks prevent older AI work from overwriting a newer human decision or publishing against changed knowledge. Public conversation messages and audit events preserve the history.
 
-## Evaluation and limitations
+## Run locally
 
-The checked-in [rules benchmark](evaluation/results/rules.json) measured **20/22 (90.9%) category accuracy**, **20/22 (90.9%) priority accuracy**, correct review on **2/2** unrelated/ambiguous cases, and suggestions on **20/24** cases. Abstaining on a labelled case counts as a miss. Negation and paraphrased billing language remain failures. These numbers describe a small hand-authored rules benchmark, **not LLM accuracy or production performance**.
+### 1. Install the prerequisites
 
-Run `python -m evaluation.run --output artifacts/rules-evaluation.json` without an API request. See [evaluation instructions](evaluation/README.md) for the opt-in free-model RAG check, retrieval recall, exact-quote checks, and latency measurements.
+- Python **3.13** available as `python`.
+- Node.js **22 or 24** with npm.
+- Git and an OpenRouter API key for automatic answers and indexing.
 
-Design tradeoffs:
+The live demo uses a key configured on Vercel. A local clone needs your own key in `.env`; deployment secrets are not included in GitHub. Manual decisions and rules comparison can run without a provider key.
 
-- SQL-stored vectors and bounded in-process cosine search keep this small prototype simple. A growing knowledge base should use a database vector index; adding one now would not establish scalability by itself.
-- Shared routing categories are administrator-managed; visitor tickets, knowledge, and index versions are isolated. Isolation is enforced in application services, not database row-level security. This is a prototype rather than a compliance boundary for sensitive data.
-- A demo uses a browser-session cookie, with **30 minutes of sliding inactivity expiry** as a server-side safeguard. Normal navigation, reload and active editing preserve the workspace. **End demo & delete data** removes its tickets, knowledge, embeddings, notes, decisions, revisions, job records and login sessions from the app database. If an AI request is running, the session is revoked immediately and its data is purged when that request finishes. Owner data is preserved. Anonymous quota counters remain until their retention window expires.
-- Browsers do not reliably notify the server when a tab or browser closes, and some restore session cookies. Closing one tab therefore does not guarantee immediate physical deletion. Expired demo data is purged in bounded batches on subsequent API requests; no paid scheduler is required. The app does not send a logout beacon on navigation or reload, which would unexpectedly erase active work. The administrator's separate persistent login default remains eight hours.
-- One index rebuild or triage runs globally at a time. This is a deliberate bound on free-provider load. Larger workloads need durable workers and a different concurrency policy.
-- Free-provider availability and quota vary. App counters are additional safeguards; they do not measure usage from other apps sharing the same OpenRouter key. The UI reports quota errors and preserves manual/rules workflows.
-- Limits also bound demo writes, new workspace creation, and per-workspace articles/tickets. Visitors cannot change operator settings. This does not replace abuse protection for a large public launch.
-
-Migration `0003` keeps existing content in owner workspace 1 and revokes legacy shared-demo sessions. Existing visitors sign in again to receive isolated workspaces. Database upgrades are tested before release; schema rollback is not an automatic recovery strategy for newly created visitor content.
-
-The prototype is configured for **zero-cost AI and free hosting plans**:
-
-- Embeddings: `nvidia/nemotron-3-embed-1b:free` through OpenRouter.
-- LLM: `nvidia/nemotron-3-super-120b-a12b:free` through OpenRouter, with JSON-schema structured output.
-- Hosting: **Vercel Hobby**, for a personal, non-commercial prototype.
-- Database: **Neon Free**, with PostgreSQL and stored embeddings.
-
-Both model IDs must end in `:free`. The server rejects paid IDs and automatic model routers, and every AI request sets a zero-price limit for input tokens, output tokens, and per-request fees. There is no paid model fallback. Only one OpenRouter key is needed; no NVIDIA key or credit purchase is required for these free model variants.
-
-Free plans have usage limits. OpenRouter currently documents 20 requests per minute and 50 requests per day for free variants on accounts that have not bought credits. Providers can impose additional limits or become unavailable. Indexing, searching, and triage consume API requests. Quota errors stay visible, and rules comparison/manual decisions remain available. Vercel Hobby and Neon Free also have usage allowances: stay on their free plans and wait for quota resets rather than upgrading. This configuration is for a bounded prototype, not unlimited free service.
-
-Sources: [NVIDIA free embeddings](https://openrouter.ai/nvidia/nemotron-3-embed-1b:free), [NVIDIA free LLM](https://openrouter.ai/nvidia/nemotron-3-super-120b-a12b:free), [OpenRouter free-model limits](https://openrouter.ai/docs/api_reference/limits), [Vercel Hobby](https://vercel.com/docs/plans/hobby), [Neon Free](https://neon.com/pricing).
-
-The owner workspace starts without tickets or knowledge. Temporary demo sessions include clearly labelled fictional starter guidance and tickets to make the workflow easy to try; they are separated from owner data and removed with the session. No AI recommendations or embeddings are fabricated. Older installations automatically remove the original legacy demo records while preserving user-created and edited content. Evaluation fixtures remain separate from starter content.
-
-## Deploy from GitHub to Vercel
-
-Vercel supports this FastAPI backend and React frontend as one project. `pyproject.toml` selects `backend.app.main:app`, and `vercel.json` builds the frontend and allows a 300-second function. Use the **repository root** as the Vercel Root Directory.
-
-1. Import this GitHub repository into your **Vercel Hobby** account. Select the **FastAPI** framework preset if it is not detected automatically. Keep the checked-in Build Command; leave Output Directory unset. Use the free `vercel.app` address; a purchased domain is unnecessary.
-2. Create a hosted **Neon PostgreSQL database on the Free plan** through Vercel's Storage/Marketplace flow and connect it to this project. If the integration does not offer a Free plan, create the database directly on [Neon Free](https://neon.com/pricing) and set its URL manually. Use its **pooled connection URL**, with TLS enabled. The backend accepts either `DATABASE_URL` or the Marketplace's `POSTGRES_URL`. If both exist, `DATABASE_URL` wins. Do not set a SQLite URL on Vercel.
-3. Before deploying, configure these backend environment variables in Vercel for Production and the Preview environments you will use:
-
-   - `DATABASE_URL`: the pooled PostgreSQL URL, unless `POSTGRES_URL` is already supplied by the integration.
-   - `OPENROUTER_API_KEY`: your OpenRouter key; the selected `:free` models do not require buying credits.
-   - `ADMIN_USERNAME`: your desired username (default `admin`).
-   - `ADMIN_PASSWORD`: a strong password of your choosing.
-   - `COOKIE_SECURE=true`: required for HTTPS cookies on the deployment.
-   - `GENERATION_MODEL=nvidia/nemotron-3-super-120b-a12b:free`: replace any earlier paid model setting.
-   - `EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b:free`: replace any earlier paid embedding setting.
-
-4. Deploy or redeploy after setting the variables. Startup runs Alembic migrations and creates the administrator once. Database migrations and administrator bootstrap are serialized across instances with PostgreSQL transaction locks. `/api/health` should return `{"status":"ok"}`.
-5. Open the deployment, sign in with your configured credentials, and follow the first-use steps below.
-
-You can also run `npx vercel login`, `npx vercel link`, verify the selected project with `npx vercel project inspect --non-interactive`, and deploy with `npx vercel --prod` from this directory. The database and environment variables must already be configured.
-
-Vercel's filesystem is temporary, so **all tickets, knowledge, sessions, audit records, and embeddings live in PostgreSQL**. No Chroma directory, local model download, or separate vector database is needed. The prototype stores vectors as JSON and computes cosine similarity over a bounded index (256 chunks by default). This is intended for a small knowledge base; larger deployments should move vector search into a database vector index.
-
-Indexing and triage finish **inside the HTTP request**, avoiding background threads that may stop after a serverless response. Job records still expose progress, outcomes, and errors. Admission is serialized in the shared database. Interrupted jobs are recoverable after their time budget expires. Larger indexing workloads need a durable worker rather than increasing the prototype limits indefinitely.
-
-## First use: bring your own knowledge
-
-For a public project review, set `PUBLIC_DEMO_ENABLED=true` in Vercel Production and redeploy. The login page displays the dedicated `demo` / `try-triage` credentials and a **Try the demo** button. Visitors receive labelled starter examples in their own temporary workspace; category/queue configuration and provider diagnostics require the administrator. The administrator password is never published. Use non-sensitive examples. Existing empty demo workspaces can use **Load starter examples** in Knowledge base. Automated evaluations can pass `starter_examples=false` at demo login for an empty workspace. Set the flag to `false` to disable new and existing demo access.
-
-1. Open **Knowledge base** and write or paste a support article describing your product, supported categories, and routing guidance. Save it.
-2. Create a separate article, check **Use as urgency policy**, and define when your team assigns `low`, `normal`, `high`, or `urgent`. Save it. No default policy is fabricated.
-3. Click **Rebuild index**. This sends article chunks to OpenRouter's embedding endpoint and stores the vectors in your database.
-4. Type a question in **Search your knowledge** to inspect relevant passages and their similarity scores.
-5. Click **New ticket**, type a subject and request, and click **Run triage**. The backend embeds the request, retrieves knowledge, and asks the OpenRouter LLM for a structured recommendation.
-6. Inspect the quoted sources and rationale, change labels if needed, then click **Confirm decision**. Notes, status changes, revisions, and decisions remain auditable.
-
-Rules comparison and manual decisions work without an OpenRouter key. RAG requires an indexed support article and urgency policy. Article edits invalidate the index until a successful rebuild. Changing `EMBEDDING_MODEL` also requires a rebuild. Requests and article passages used for AI are sent to OpenRouter and its selected model provider.
-
-## Local development
-
-Prerequisites: Python 3.13, Node.js 22 or 24, and npm.
+### 2. Clone and configure
 
 ```powershell
+git clone https://github.com/k4rthiikeyan/ai-ticket-triage.git
+cd ai-ticket-triage
 Copy-Item .env.example .env
-# Edit .env: replace ADMIN_PASSWORD and OPENROUTER_API_KEY placeholders.
+```
+
+Edit `.env` before the first start. Replace the password and key placeholders:
+
+```dotenv
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=replace_with_your_own_strong_password
+OPENROUTER_API_KEY=replace_with_your_openrouter_key
+DATABASE_URL=sqlite:///./data/triage.db
+COOKIE_SECURE=false
+CUSTOMER_PORTAL_ENABLED=true
+PUBLIC_DEMO_ENABLED=true
+```
+
+Leave the other settings from `.env.example` in place. `PUBLIC_DEMO_ENABLED=true` enables the temporary demo and starter content; set it to `false` if you only want your persistent owner workspace. Keep real keys and `.env` out of commits.
+
+### 3. Install and start — Windows PowerShell
+
+```powershell
 .\scripts\setup.ps1
 .\scripts\start.ps1
 ```
 
-Open **http://127.0.0.1:8000**. Local development uses SQLite at ignored `data/triage.db`, including the stored embeddings. The same SQL models and migrations support PostgreSQL on Vercel. For separate frontend development, run `npm run dev` in `frontend`; Vite proxies `/api` to port 8000.
+Setup creates `.venv`, installs Python and frontend dependencies, and builds the frontend. Startup applies database migrations and creates the first administrator.
 
-`.env` and `.env.local` are ignored. Real keys never belong in the frontend or repository. An optional `OPENROUTER_EMBEDDING_API_KEY` can use a different key for embeddings; leaving it blank uses `OPENROUTER_API_KEY` for both APIs. Defaults are the free NVIDIA models listed above. Alternate models must have a `:free` suffix, and the generation model must support JSON-schema structured outputs. Routing requires support for the requested parameters. Paid settings from older versions now fail validation instead of making a billed request. After changing the embedding model, rebuild any existing knowledge index.
+- **Admin:** [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+- **Customer:** [http://127.0.0.1:8000/support](http://127.0.0.1:8000/support)
+- **Health check:** [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
 
-The environment template documents the remaining settings. `INFERENCE_TIMEOUT` defaults to 60 seconds per provider call, and `JOB_TIMEOUT` defaults to 240 seconds. The OpenRouter status reports whether keys are configured; actual requests verify authentication, free quotas, and provider availability. Missing keys and provider failures produce visible errors without a paid fallback. Reasoning is disabled for the short structured triage response to keep it within the prototype request budget.
+Select **Try the demo** and repeat the two-tab walkthrough above, using the local URLs. To keep your own data, sign in as `admin` with your configured password instead, then add knowledge as described below. Press `Ctrl+C` in the terminal to stop the server.
 
-`ADMIN_USERNAME` and `ADMIN_PASSWORD` bootstrap the first administrator only; changing them does not replace an existing account. Use a dedicated database for this prototype. If your database account cannot run migrations, migrate once with appropriate credentials using `python -m backend.app.cli init`, then set `AUTO_MIGRATE=false` for the runtime account.
+<details>
+<summary><strong>macOS / Linux manual setup</strong></summary>
+
+After cloning, from the repository root:
+
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+cp .env.example .env
+# Edit .env with your administrator password and OpenRouter key.
+npm ci --prefix frontend
+npm run build --prefix frontend
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+</details>
+
+For frontend development with hot reload, keep the backend running and run `npm run dev --prefix frontend` in a second terminal. Use the URL Vite prints; it proxies `/api` to port 8000.
+
+### 4. Set up your persistent owner workspace
+
+The owner workspace starts empty. Demo examples are kept separately.
+
+1. Sign in at the local admin URL with the credentials from `.env`.
+2. Open **Knowledge base → New article**, enter a title and support guidance, then save. For a minimal example, use title **Billing support** and this content:
+
+   ```text
+   Refunds, invoices, receipts, subscription charges and declined payments belong to Billing.
+   An approved refund can take five to ten business days to reach the original payment method.
+   If ten business days have passed, Billing should investigate the refund reference.
+   ```
+
+3. Create another article titled **Urgency policy**, check **Use as urgency policy**, and save this example:
+
+   ```text
+   Routine billing enquiries have normal priority.
+   A delayed refund has normal priority while the product is working and there is no suspected fraud or account compromise.
+   Work-blocking incidents with no workaround have high priority.
+   Suspected account compromise or a service outage affecting all users has urgent priority.
+   Future optional feature requests have low priority.
+   Unrelated, ambiguous or unsupported requests require human review.
+   ```
+
+4. Click **Rebuild index**. Rebuild again whenever you edit articles or change the embedding model.
+5. Open the local customer portal in a second tab, submit the general refund-policy question, then return to admin to inspect the result.
+
+Admin credentials bootstrap the first account only; changing `.env` later does not change an existing account's password. If `.env.local` exists, it overrides matching `.env` settings.
+
+The admin **New ticket → Run triage → Confirm decision** controls provide a separate classification workflow. To test customer answers and conversation updates, raise the enquiry through **Customer portal**.
 
 ## Verification
 
+From the repository root on Windows:
+
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
-cd frontend
-npm test
-npm run build
+npm test --prefix frontend
+npm run build --prefix frontend
+Push-Location frontend
 npx playwright install chromium
 npm run test:e2e
+Pop-Location
 ```
 
-Backend tests mock OpenRouter's HTTP transport to verify authentication, embedding ordering and validation, structured generation, and safe errors. SQL retrieval tests use a real SQLite database and reopen the stored index. Browser tests use a real isolated API/database with explicitly mocked OpenRouter responses, starting empty and adding knowledge through the UI. Real OpenRouter calls and hosted PostgreSQL require configured credentials and are not represented as verified by these mocks.
+API and browser tests use isolated databases and mocked OpenRouter transport. They cover automatic completion, escalation, session isolation, evidence checks, private revisions, corrections, follow-ups, and stale-result protection. GitHub Actions also runs against PostgreSQL 16. The local PostgreSQL test is skipped unless a disposable `TEST_POSTGRES_URL` is configured.
 
-GitHub Actions also runs the complete backend flow against a disposable PostgreSQL 16 service. Locally, that integration test is skipped unless `TEST_POSTGRES_URL` points to a disposable test database. It creates and removes a uniquely named test schema. It uses mocked OpenRouter responses; it does not spend API credits.
+The deployed app was also exercised with the real provider on **15 October 2026**: three informational enquiries received automatic answers; five financial, recovery, outage, explicit-human, and unsupported requests went to review. A completed answer was marked reviewed, corrected by an administrator, and verified in the customer conversation. This is a functional smoke test, not an accuracy benchmark.
 
-## References
+See the [engineering verification guide](docs/engineering.md#verification) for opt-in local and deployed provider checks. The [evaluation guide](evaluation/README.md) explains the hand-labelled rules benchmark and its limitations; rules results do not measure LLM accuracy.
 
-- [OpenRouter free NVIDIA embeddings](https://openrouter.ai/nvidia/nemotron-3-embed-1b:free)
-- [OpenRouter structured outputs](https://openrouter.ai/docs/guides/features/structured-outputs)
-- [FastAPI on Vercel](https://vercel.com/docs/frameworks/backend/fastapi)
+## Project structure
 
-## Provider connection checks
+```text
+backend/app/
+  routes/              Admin and customer APIs
+  services/            Retrieval, resolution, triage, provider, usage, isolation
+  models.py            Database entities
+  schemas.py           Request and structured-output validation
+backend/migrations/    Alembic schema upgrades
+frontend/src/          Customer portal and administrator interface
+frontend/e2e/          Playwright workflow tests
+tests/                 Backend and database integration tests
+evaluation/            Fixtures, benchmarks, and opt-in live checks
+scripts/               Local setup and release verification
+docs/                  Engineering guide and product screenshots
+```
 
-An administrator can test the configured OpenRouter services with POST /api/system/check-provider?kind=embeddings or kind=llm, including the normal X-CSRF-Token header. Each explicit check sends one tiny request through the existing free-only gateway and creates no tickets, articles, or index entries. The response reports success or a safe provider error without returning API keys. These checks count toward free-model rate limits.
+## Scope and next steps
+
+This is a portfolio prototype for a small, maintained knowledge base. Retrieval uses a bounded SQL-stored index rather than a dedicated vector service. Customer history is tied to an anonymous browser session, and application-level workspace checks provide isolation. Automatic completion means an informational answer was published; it does not prove customer satisfaction or perform external account actions.
+
+Useful future extensions include verified customer accounts, helpdesk integrations, durable background workers, database-native vector search, and a larger independently labelled evaluation set. These are future work.
+
+For hosting configuration, environment settings, database behavior, request budgets, and deployment steps, read the [engineering and deployment guide](docs/engineering.md). The [redesign plan](REDESIGN_PLAN.md) documents the product decisions and release evidence.
