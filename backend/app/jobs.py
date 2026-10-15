@@ -5,12 +5,48 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlmodel import Session, select
 from sqlalchemy import delete
-from .models import AppState, Article, Category, Job, RecommendationRun, Ticket, AuditEvent, KnowledgeChunk, Workspace, now
+from .models import AppState, Article, Category, Job, RecommendationRun, Ticket, AuditEvent, KnowledgeChunk, Workspace, TicketMessage, Decision, now
 from .rag import run_rag, run_rules
 from .services.usage import BudgetedGateway
 from .services.workspaces import cleanup_expired
+from .services.resolution import run_resolution, needs_review, risk_reason, REASONS
 
 logger = logging.getLogger(__name__)
+
+
+def recover_interrupted(session, job):
+    """A stopped request must not leave a customer waiting in processing forever."""
+    if job.kind not in ['resolve', 'revise'] or not job.ticket_id:
+        return
+    ticket = session.exec(select(Ticket).where(Ticket.id == job.ticket_id).with_for_update()).first()
+    if (ticket and ticket.resolution_state == 'processing'
+            and ticket.outcome_version == job.result.get('outcome_version')):
+        ticket.status, ticket.resolution_state, ticket.review_reason = 'open', 'needs_review', 'provider_unavailable'
+        ticket.outcome_version += 1
+        ticket.updated_at = now()
+        session.add(ticket)
+        session.add(TicketMessage(ticket_id=ticket.id, author='system', kind='handoff',
+            body='Your request was interrupted. It is saved for our support team to review.'))
+
+
+def recover_overdue(session, settings):
+    """Recover bounded, overdue work on warm instances as well as at startup."""
+    cutoff = now() - timedelta(seconds=settings.job_timeout + settings.inference_timeout + 30)
+    jobs = session.exec(select(Job).where(Job.status.in_(['queued', 'running']), Job.created_at < cutoff)
+                        .with_for_update(skip_locked=True).limit(10)).all()
+    for job in jobs:
+        if job.kind in ['resolve', 'revise'] and job.ticket_id:
+            # Never wait on a publishing transaction while holding its job lock.
+            ticket = session.exec(select(Ticket).where(Ticket.id == job.ticket_id)
+                                  .with_for_update(skip_locked=True)).first()
+            if ticket is None:
+                continue
+        job.status = 'failed'
+        job.error = 'This operation exceeded its time limit or was interrupted. Retry explicitly.'
+        job.progress = 'Interrupted request recovered'
+        job.finished_at = now()
+        session.add(job)
+        recover_interrupted(session, job)
 
 
 def readable_error(error):
@@ -50,16 +86,23 @@ def enqueue(app, kind: str, ticket_id=None, workspace=1, is_demo=False):
                 prior.error = 'This operation was interrupted or timed out. Retry explicitly.'
                 prior.finished_at = now()
                 session.add(prior)
+                recover_interrupted(session, prior)
             if kind == 'rag' and (not state.index_id or state.knowledge_version != state.index_knowledge_version or state.embedding_model != app.state.settings.embedding_model):
                 raise HTTPException(409, 'The knowledge index is missing or stale. Rebuild it in Knowledge base before running RAG.')
             ticket = session.get(Ticket, ticket_id) if ticket_id else None
             if ticket_id and (ticket is None or ticket.workspace_id != workspace):
                 raise HTTPException(404, 'Ticket not found')
+            if kind in ['resolve', 'revise']:
+                ticket.resolution_state = 'processing'
+                ticket.outcome_version += 1
+                ticket.draft_run_id = None
+                session.add(ticket)
             snapshot = {
                 'ticket': ticket.model_copy(deep=True) if ticket else None,
                 'categories': [c.model_copy(deep=True) for c in session.exec(select(Category).where(Category.active == True)).all()],
                 'state': state.model_copy(deep=True),
                 'is_demo': is_demo,
+                'conversation': [{'author': m.author, 'body': m.body} for m in session.exec(select(TicketMessage).where(TicketMessage.ticket_id == ticket_id).order_by(TicketMessage.created_at, TicketMessage.id)).all()] if ticket else [],
                 'articles': [a.model_copy(deep=True) for a in session.exec(select(Article).where(Article.workspace_id == workspace, Article.active == True)).all()] if kind == 'reindex' else [],
             }
             if kind == 'reindex' and not any(a.is_policy for a in snapshot['articles']):
@@ -69,6 +112,8 @@ def enqueue(app, kind: str, ticket_id=None, workspace=1, is_demo=False):
             if kind == 'rag' and not snapshot['categories']:
                 raise HTTPException(409, 'Add an active category and queue in Settings before running triage.')
             job = Job(id=uuid4().hex, kind=kind, ticket_id=ticket_id, workspace_id=workspace)
+            if kind in ['resolve', 'revise']:
+                job.result = {'outcome_version': ticket.outcome_version}
             session.add(job)
             session.commit()
             session.refresh(job)
@@ -126,19 +171,54 @@ def execute(app, job_id, snapshot):
                 session.add(job)
                 session.commit()
         else:
-            payload = run_rules(ticket, snapshot['categories']) if kind == 'rules' else run_rag(
-                ticket, snapshot['categories'], state, gateway, app.state.store, app.state.settings, progress)
+            resolving = kind in ['resolve', 'revise']
+            if resolving:
+                ready = (state.index_id and state.knowledge_version == state.index_knowledge_version
+                         and state.embedding_model == app.state.settings.embedding_model)
+                reason = risk_reason(f'{ticket.subject}\n{ticket.body}')
+                payload = needs_review(reason) if reason else (run_resolution(ticket, snapshot['categories'], state, gateway, app.state.store,
+                                         app.state.settings, progress, snapshot.get('conversation', [])) if ready else needs_review('knowledge_unavailable'))
+            else:
+                payload = run_rules(ticket, snapshot['categories']) if kind == 'rules' else run_rag(
+                    ticket, snapshot['categories'], state, gateway, app.state.store, app.state.settings, progress)
             result_id = uuid4().hex
             with Session(engine) as session:
                 session.add(RecommendationRun(id=result_id, ticket_id=ticket.id, ticket_revision=ticket.revision,
-                    taxonomy_version=state.taxonomy_version, index_version=state.index_id if kind == 'rag' else None,
-                    method=kind, model=app.state.settings.generation_model if kind == 'rag' else 'deterministic-keywords-v1',
+                    taxonomy_version=state.taxonomy_version, index_version=state.index_id if kind != 'rules' else None,
+                    method=kind, model=app.state.settings.generation_model if kind != 'rules' else 'deterministic-keywords-v1',
                     outcome=payload['outcome'], payload=payload))
+                if resolving:
+                    current = session.exec(select(Ticket).where(Ticket.id == ticket.id).with_for_update()).one()
+                    latest = session.get(AppState, state.id)
+                    if current.outcome_version != ticket.outcome_version or current.revision != ticket.revision:
+                        raise ValueError('A newer customer or administrator update superseded this answer.')
+                    if (latest.knowledge_version != state.knowledge_version or latest.index_id != state.index_id
+                            or latest.taxonomy_version != state.taxonomy_version):
+                        raise ValueError('Knowledge or routing changed while the answer was being written. Review is required.')
+                    current.updated_at = now()
+                    current.outcome_version += 1
+                    if payload['outcome'] == 'suggested' and kind == 'resolve':
+                        labels = payload['suggestions']
+                        current.category_id, current.priority, current.queue_id = labels['category_id'], labels['priority'], labels['queue_id']
+                        current.answer = payload['answer']
+                        current.status, current.resolution_state, current.review_reason = 'resolved', 'resolved_ai', ''
+                        session.add(TicketMessage(ticket_id=ticket.id, author='assistant', kind='answer', body=payload['answer'], citations=payload['answer_citations']))
+                        session.add(Decision(ticket_id=ticket.id, ticket_revision=ticket.revision, recommendation_id=result_id,
+                            **labels, action='automated', note='Grounded informational answer; no external action executed.'))
+                    elif payload['outcome'] == 'suggested':
+                        current.status, current.resolution_state, current.review_reason = 'open', 'changes_requested', 'policy_exception'
+                        current.draft_run_id = result_id
+                    else:
+                        current.status, current.resolution_state = 'open', 'needs_review'
+                        current.review_reason = payload['reason_code']
+                        session.add(TicketMessage(ticket_id=ticket.id, author='system', kind='handoff',
+                            body='Your enquiry is with the support team. ' + REASONS.get(payload['reason_code'], REASONS['insufficient_evidence'])))
+                    session.add(current)
                 session.add(AuditEvent(workspace_id=state.id, actor='demo' if snapshot.get('is_demo') else 'admin', ticket_id=ticket.id, action='triage_completed', detail={'method': kind, 'outcome': payload['outcome'], 'recommendation_id': result_id}))
                 job = session.get(Job, job_id)
                 job.result = {'recommendation_id': result_id}
                 job.status = 'needs_review' if payload['outcome'] == 'needs_review' else 'succeeded'
-                job.progress = 'Human confirmation required' if payload['outcome'] == 'suggested' else 'Manual review required'
+                job.progress = ('Enquiry answered automatically' if kind == 'resolve' else 'Revised draft ready for administrator review') if resolving and payload['outcome'] == 'suggested' else ('Human confirmation required' if payload['outcome'] == 'suggested' else 'Support team review required')
                 job.finished_at = now()
                 session.add(job)
                 session.commit()
@@ -149,10 +229,19 @@ def execute(app, job_id, snapshot):
             if ticket:
                 result_id = uuid4().hex
                 session.add(RecommendationRun(id=result_id, ticket_id=ticket.id, ticket_revision=ticket.revision,
-                    taxonomy_version=state.taxonomy_version, index_version=state.index_id if job.kind == 'rag' else None,
-                    method=job.kind, model=app.state.settings.generation_model if job.kind == 'rag' else 'deterministic-keywords-v1',
+                    taxonomy_version=state.taxonomy_version, index_version=state.index_id if job.kind != 'rules' else None,
+                    method=job.kind, model=app.state.settings.generation_model if job.kind != 'rules' else 'deterministic-keywords-v1',
                     outcome='failed', payload={'outcome': 'failed', 'suggestions': None, 'error': message, 'citations': [], 'retrieved': [], 'sources': [], 'scores': {}, 'rationales': {'review': message}}))
                 job.result = {'recommendation_id': result_id}
+                if job.kind in ['resolve', 'revise']:
+                    current = session.exec(select(Ticket).where(Ticket.id == ticket.id).with_for_update()).first()
+                    if current and current.outcome_version == ticket.outcome_version and current.resolution_state == 'processing':
+                        current.status, current.resolution_state = 'open', 'needs_review'
+                        current.review_reason = 'provider_unavailable'
+                        current.outcome_version += 1
+                        current.updated_at = now()
+                        session.add(current)
+                        session.add(TicketMessage(ticket_id=ticket.id, author='system', kind='handoff', body=REASONS['provider_unavailable']))
             job.status = 'failed'
             job.error = message
             job.progress = 'Operation failed; retry is available'

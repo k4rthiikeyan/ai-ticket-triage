@@ -19,24 +19,26 @@ export function DashboardPage() {
   if (!dashboard) return <Loading />;
   const metrics = [
     {
-      label: "New tickets",
-      value: dashboard.status.new,
+      label: "Needs human review",
+      value:
+        dashboard.automation.needs_review +
+        dashboard.automation.changes_requested,
       icon: Inbox,
-      description: "Waiting for triage",
+      description: "Exceptions and follow-ups",
       tone: "green",
     },
     {
-      label: "Open tickets",
-      value: dashboard.status.open,
+      label: "Answered by AI",
+      value: dashboard.automation.resolved_ai,
       icon: LoaderCircle,
-      description: "In your team’s queue",
+      description: "Completed without approval",
       tone: "blue",
     },
     {
       label: "Resolved tickets",
       value: dashboard.status.resolved,
       icon: CheckCircle2,
-      description: "Reviewed and completed",
+      description: "AI and human outcomes",
       tone: "purple",
     },
     {
@@ -50,9 +52,9 @@ export function DashboardPage() {
   return (
     <>
       <PageHeading
-        eyebrow="WORKSPACE OVERVIEW"
-        title="A clearer view of your queue."
-        description="Track incoming requests, review recommendations, and keep support moving."
+        eyebrow="SUPPORT OPERATIONS"
+        title="More answers. Fewer handoffs."
+        description="Routine enquiries finish automatically. Your team handles the moments that need a person."
         action={
           <button className="button primary" onClick={newTicket}>
             <Plus size={17} />
@@ -74,6 +76,20 @@ export function DashboardPage() {
           </div>
         ))}
       </div>
+      <div className="operations-links">
+        <Link to="/tickets?resolution=review" className="button primary">
+          <ShieldCheck size={16} />
+          Open review queue
+          <ArrowRight size={15} />
+        </Link>
+        <Link to="/tickets?resolution=resolved_ai" className="button">
+          Audit AI answers
+        </Link>
+        <Link to="/support" className="button">
+          Preview customer portal
+          <ArrowUpRight size={15} />
+        </Link>
+      </div>
       <div className="workspace-banner">
         <div className="banner-icon">
           <Sparkles size={22} />
@@ -82,14 +98,14 @@ export function DashboardPage() {
           <strong>
             {dashboard.total === 0
               ? "Try triage with your own requests."
-              : "Recommendations with a reason."}
+              : "Every answer remains accountable."}
           </strong>
           <p>
             {dashboard.total === 0
               ? "Add your support articles and urgency policy, rebuild the index, then create a ticket and run triage."
               : isDemo
-                ? "Starter examples are labelled Example. Build the knowledge index, open a ticket, run triage, and inspect the evidence before confirming."
-                : "Retrieve relevant knowledge. Inspect the evidence. Make the final call."}
+                ? "Build the knowledge index, then open the customer portal to try automatic answers and exception handling."
+                : "Open any completed ticket to inspect sources, publish a correction, or request a revised answer."}
           </p>
         </div>
         <Link to="/knowledge" className="button">
@@ -104,7 +120,7 @@ export function DashboardPage() {
           <div className="card-header">
             <div>
               <h2>Tickets by category</h2>
-              <p>Confirmed labels across the workspace</p>
+              <p>Current classifications across the workspace</p>
             </div>
             <span className="subtle-label">{dashboard.total} tickets</span>
           </div>
@@ -137,7 +153,7 @@ export function DashboardPage() {
           <div className="card-header">
             <div>
               <h2>Priority breakdown</h2>
-              <p>Human-confirmed urgency</p>
+              <p>Current urgency across all enquiries</p>
             </div>
           </div>
           <div className="priority-list">
@@ -156,7 +172,7 @@ export function DashboardPage() {
           </div>
           <div className="card-footer">
             <ShieldCheck size={15} />
-            Suggestions count only after confirmation.
+            Completed AI answers apply their routing labels automatically.
           </div>
         </section>
       </div>

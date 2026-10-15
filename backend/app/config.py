@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     admin_username: str = 'admin'
     admin_password: str = ''
     public_demo_enabled: bool = False
+    customer_portal_enabled: bool = True
     database_url: str = Field(default='sqlite:///./data/triage.db', validation_alias=AliasChoices('DATABASE_URL', 'POSTGRES_URL'))
     openrouter_api_key: SecretStr = SecretStr('')
     openrouter_embedding_api_key: SecretStr = SecretStr('')

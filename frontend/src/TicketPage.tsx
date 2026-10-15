@@ -1,4 +1,5 @@
 import { Recommendation } from "./Recommendation";
+import { OutcomeReview } from "./OutcomeReview";
 import {
   useCallback,
   useEffect,
@@ -180,23 +181,25 @@ export function TicketPage() {
             <span className="middot">·</span>Request revision {ticket!.revision}
           </p>
         </div>
-        <button
-          className="button"
-          disabled={busy || !ticket!.category_id}
-          onClick={() =>
-            operation(async () => {
-              await patch("/tickets/" + id, {
-                expected_revision: ticket!.revision,
-                status: ticket!.status === "resolved" ? "open" : "resolved",
-              });
-              await load();
-              await refresh();
-            })
-          }
-        >
-          <Check size={16} />
-          {ticket!.status === "resolved" ? "Reopen ticket" : "Mark resolved"}
-        </button>
+        {!ticket!.customer_id && (
+          <button
+            className="button"
+            disabled={busy || !ticket!.category_id}
+            onClick={() =>
+              operation(async () => {
+                await patch("/tickets/" + id, {
+                  expected_revision: ticket!.revision,
+                  status: ticket!.status === "resolved" ? "open" : "resolved",
+                });
+                await load();
+                await refresh();
+              })
+            }
+          >
+            <Check size={16} />
+            {ticket!.status === "resolved" ? "Reopen ticket" : "Mark resolved"}
+          </button>
+        )}
       </div>
       <ErrorBox message={error} />
       {success && (
@@ -207,6 +210,7 @@ export function TicketPage() {
       )}
       <div className="ticket-detail-grid">
         <div className="ticket-main">
+          <OutcomeReview detail={detail} reload={load} />
           <section className="card">
             <div className="card-header">
               <div>
@@ -337,8 +341,14 @@ export function TicketPage() {
                 >
                   {detail.runs.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.method === "rag" ? "RAG" : "Rules"} ·{" "}
-                      {dateLabel(r.created_at)} ·{" "}
+                      {r.method === "rules"
+                        ? "Rules"
+                        : r.method === "rag"
+                          ? "RAG"
+                          : r.method === "revise"
+                            ? "Answer revision"
+                            : "Automatic answer"}{" "}
+                      · {dateLabel(r.created_at)} ·{" "}
                       {r.outcome.replaceAll("_", " ")}
                       {r.stale ? " · stale" : ""}
                     </option>
@@ -392,8 +402,8 @@ export function TicketPage() {
           <section className="card">
             <div className="card-header">
               <div>
-                <h2>Confirmed decision</h2>
-                <p>Only human-confirmed labels are final</p>
+                <h2>Current classification</h2>
+                <p>Applied by resolution or administrator review</p>
               </div>
             </div>
             <dl className="confirmed-data">
@@ -422,8 +432,16 @@ export function TicketPage() {
           <section className="card confirmation-card">
             <div className="card-header">
               <div>
-                <h2>Review & confirm</h2>
-                <p>Accept the suggestion or choose your own</p>
+                <h2>
+                  {ticket!.customer_id
+                    ? "Adjust routing labels"
+                    : "Review & confirm"}
+                </h2>
+                <p>
+                  {ticket!.customer_id
+                    ? "Optional classification controls"
+                    : "Accept the suggestion or choose your own"}
+                </p>
               </div>
             </div>
             <form className="padded" onSubmit={saveDecision}>

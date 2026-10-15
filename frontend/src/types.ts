@@ -31,6 +31,13 @@ export interface Ticket {
   queue_name: string | null;
   created_at: string;
   updated_at: string;
+  resolution_state: string;
+  outcome_version: number;
+  answer: string;
+  review_reason: string;
+  review_note: string;
+  draft_run_id: string | null;
+  customer_id: string | null;
 }
 export interface Source {
   chunk_id: string;
@@ -53,7 +60,7 @@ export interface Run {
   id: string;
   ticket_revision: number;
   index_version: string | null;
-  method: "rag" | "rules";
+  method: "rag" | "rules" | "resolve" | "revise";
   model: string;
   outcome: string;
   stale: boolean;
@@ -67,11 +74,15 @@ export interface Run {
     sources: Source[];
     error?: string;
     latency_ms?: number;
+    answer?: string;
+    answer_citations?: Citation[];
   };
 }
 export interface TicketDetail {
   ticket: Ticket;
   runs: Run[];
+  messages: ConversationMessage[];
+  review_explanation: string;
   notes: { id: number; body: string; created_at: string }[];
   decisions: {
     id: number;
@@ -131,6 +142,7 @@ export interface Dashboard {
   priorities: { name: string; count: number }[];
   queues: { name: string; count: number }[];
   recent: Ticket[];
+  automation: Record<string, number>;
 }
 export interface Article {
   id: string;
@@ -142,3 +154,12 @@ export interface Article {
   updated_at: string;
 }
 export const priorities: Priority[] = ["low", "normal", "high", "urgent"];
+
+export interface ConversationMessage {
+  id: number;
+  author: "customer" | "assistant" | "admin" | "system";
+  kind: string;
+  body: string;
+  citations: Citation[];
+  created_at: string;
+}

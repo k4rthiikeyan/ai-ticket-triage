@@ -2,7 +2,7 @@
 from datetime import timedelta
 from sqlalchemy import delete, update
 from sqlmodel import select
-from ..models import Workspace, AppState, LoginSession, Ticket, Article, Job, Decision, Note, AuditEvent, TicketRevision, RecommendationRun, ArticleRevision, KnowledgeChunk, UsageBucket, now
+from ..models import Workspace, AppState, LoginSession, Ticket, Article, Job, Decision, Note, AuditEvent, TicketRevision, RecommendationRun, ArticleRevision, KnowledgeChunk, UsageBucket, CustomerSession, TicketMessage, now
 
 
 def workspace_id(session):
@@ -47,12 +47,13 @@ def delete_workspace(session, identifier):
     active = session.exec(select(Job.id).where(Job.workspace_id == identifier,
         Job.status.in_(['queued', 'running']), Job.created_at >= cutoff)).first()
     session.exec(delete(LoginSession).where(LoginSession.workspace_id == identifier))
+    session.exec(delete(CustomerSession).where(CustomerSession.workspace_id == identifier))
     if active:
         return False
     session.exec(delete(AuditEvent).where(AuditEvent.workspace_id == identifier))
     ticket_ids = select(Ticket.id).where(Ticket.workspace_id == identifier)
     article_ids = select(Article.id).where(Article.workspace_id == identifier)
-    for model in [Decision, Note, AuditEvent, TicketRevision, RecommendationRun]:
+    for model in [TicketMessage, Decision, Note, AuditEvent, TicketRevision, RecommendationRun]:
         session.exec(delete(model).where(model.ticket_id.in_(ticket_ids)))
     session.exec(delete(Job).where(Job.workspace_id == identifier))
     session.exec(delete(Ticket).where(Ticket.workspace_id == identifier))
@@ -71,6 +72,7 @@ def cleanup_expired(session):
     for workspace in expired:
         delete_workspace(session, workspace.id)
     session.exec(delete(UsageBucket).where(UsageBucket.expires_at < now()))
+    session.exec(delete(CustomerSession).where(CustomerSession.expires_at < now()))
 
 
 def enforce_size(session, model, limit):

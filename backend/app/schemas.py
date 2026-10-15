@@ -89,3 +89,22 @@ class GeneratedTriage(StrictModel):
     priority_rationale: str = Field(max_length=700)
     category_evidence: list[Evidence] = Field(max_length=4)
     priority_evidence: list[Evidence] = Field(max_length=4)
+
+
+class GeneratedResolution(GeneratedTriage):
+    answer: str = Field(max_length=6000)
+    answer_evidence: list[Evidence] = Field(max_length=8)
+    requires_human: bool
+    reason_code: Literal['none', 'action_required', 'security', 'outage', 'privacy_legal',
+                         'human_requested', 'insufficient_evidence', 'policy_exception']
+
+
+class CustomerFollowup(StrictModel):
+    body: str = Field(min_length=3, max_length=4000)
+    expected_version: int
+
+
+class OutcomeReview(StrictModel):
+    action: Literal['approve', 'correct', 'request_changes', 'reopen']
+    expected_version: int
+    body: str = Field(default='', max_length=6000)

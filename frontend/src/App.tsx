@@ -40,7 +40,16 @@ import { TicketPage } from "./TicketPage";
 import { KnowledgePage } from "./KnowledgePage";
 import { SettingsPage } from "./SettingsPage";
 import { useDemoActivity } from "./useDemoActivity";
+import { CustomerPortal } from "./CustomerPortal";
 export default function App() {
+  const location = useLocation();
+  return location.pathname.startsWith("/support") ? (
+    <CustomerPortal />
+  ) : (
+    <AdminApp />
+  );
+}
+function AdminApp() {
   const [user, setUser] = useState<string | null>(null),
     [isDemo, setIsDemo] = useState(false),
     [booting, setBooting] = useState(true),
@@ -104,6 +113,14 @@ export default function App() {
   useEffect(() => {
     if (user) refresh().catch((e) => setWorkspaceError(e.message));
   }, [user, refresh]);
+  useEffect(() => {
+    if (!user || isDemo) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden)
+        refresh().catch((e) => setWorkspaceError(e.message));
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [user, isDemo, refresh]);
   useEffect(() => {
     if (!job && system) {
       const active = system.jobs.find((j) =>
@@ -216,17 +233,40 @@ export default function App() {
             <div>
               <strong>Your support workspace</strong>
               <span>
-                {isDemo ? "Your demo workspace" : "Single-team workspace"}
+                {isDemo ? "Your demo workspace" : "Support operations"}
               </span>
             </div>
           </div>
           <div className="nav-label">WORKSPACE</div>
           <nav>
+            <Link
+              to="/tickets?resolution=review"
+              className={
+                location.pathname === "/tickets" &&
+                location.search.includes("resolution=review")
+                  ? "active"
+                  : ""
+              }
+            >
+              <ShieldCheck size={18} />
+              Needs review
+              <span className="nav-count">
+                {(dashboard?.automation.needs_review || 0) +
+                  (dashboard?.automation.changes_requested || 0)}
+              </span>
+            </Link>
             <NavLink to="/" end>
               <LayoutDashboard size={18} />
               Overview
             </NavLink>
-            <NavLink to="/tickets">
+            <NavLink
+              to="/tickets"
+              className={({ isActive }) =>
+                isActive && !location.search.includes("resolution=review")
+                  ? "active"
+                  : ""
+              }
+            >
               <Inbox size={18} />
               All tickets
               <span className="nav-count">{dashboard?.total || 0}</span>
@@ -284,8 +324,12 @@ export default function App() {
             </Link>
             <div className="local-pill">
               <span className="status-dot online" />
-              Support workspace
+              Admin workspace
             </div>
+            <Link to="/support" className="button small-button">
+              Customer portal
+              <ArrowUpRight size={14} />
+            </Link>
             <span className="avatar small-avatar">A</span>
           </header>
           <main className="page-content">
@@ -372,7 +416,11 @@ export default function App() {
                   ? "Knowledge index"
                   : job.kind === "rag"
                     ? "RAG triage"
-                    : "Rules comparison"}
+                    : job.kind === "resolve"
+                      ? "Automatic resolution"
+                      : job.kind === "revise"
+                        ? "Answer revision"
+                        : "Rules comparison"}
               </strong>
               <p>{job.error || job.progress}</p>
               {job.ticket_id && (

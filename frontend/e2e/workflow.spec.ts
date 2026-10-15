@@ -125,7 +125,7 @@ test("operator creates a ticket, compares rules, confirms, notes, resolves, and 
   await page.getByLabel("Password", { exact: true }).fill("test-password");
   await page.getByRole("button", { name: "Sign in to workspace" }).click();
   await expect(
-    page.getByRole("heading", { name: "A clearer view of your queue." }),
+    page.getByRole("heading", { name: "More answers. Fewer handoffs." }),
   ).toBeVisible();
   await page.getByRole("button", { name: "New ticket", exact: true }).click();
   await page

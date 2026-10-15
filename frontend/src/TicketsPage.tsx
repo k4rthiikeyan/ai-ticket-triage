@@ -11,6 +11,7 @@ export function TicketsPage() {
   const { taxonomy, dashboard, newTicket, lastJob } = useWorkspace();
   const [params, setParams] = useSearchParams();
   const status = params.get("status") || "";
+  const resolution = params.get("resolution") || "";
   const [query, setQuery] = useState(""),
     [category, setCategory] = useState(""),
     [priority, setPriority] = useState(""),
@@ -21,7 +22,7 @@ export function TicketsPage() {
   const deferred = useDeferredValue(query);
   useEffect(() => {
     setOffset(0);
-  }, [deferred, status, category, priority, queue]);
+  }, [deferred, status, category, priority, queue, resolution]);
   useEffect(() => {
     let live = true;
     const p = new URLSearchParams({
@@ -29,6 +30,7 @@ export function TicketsPage() {
       status,
       priority,
       offset: String(offset),
+      resolution,
     });
     if (category) p.set("category_id", category);
     if (queue) p.set("queue_id", queue);
@@ -45,13 +47,32 @@ export function TicketsPage() {
     return () => {
       live = false;
     };
-  }, [deferred, status, category, priority, queue, offset, lastJob]);
+  }, [
+    deferred,
+    status,
+    category,
+    priority,
+    queue,
+    offset,
+    lastJob,
+    resolution,
+  ]);
   return (
     <>
       <PageHeading
         eyebrow="TEAM INBOX"
-        title="All tickets"
-        description="One place to review, categorize, and route every request."
+        title={
+          resolution === "review"
+            ? "Needs your attention"
+            : resolution === "resolved_ai"
+              ? "Answered automatically"
+              : "All tickets"
+        }
+        description={
+          resolution === "review"
+            ? "Exceptions, follow-ups, and revised answers waiting for a person."
+            : "Every enquiry and outcome, ready to inspect or improve."
+        }
         action={
           <button className="button primary" onClick={newTicket}>
             <Plus size={17} />
@@ -70,7 +91,12 @@ export function TicketsPage() {
             <button
               key={String(value)}
               className={status === value ? "active" : ""}
-              onClick={() => setParams(value ? { status: String(value) } : {})}
+              onClick={() =>
+                setParams({
+                  ...Object.fromEntries(params),
+                  status: String(value),
+                })
+              }
             >
               {label}
               <span>{count || 0}</span>

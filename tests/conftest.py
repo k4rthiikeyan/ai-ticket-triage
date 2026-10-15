@@ -26,10 +26,15 @@ class FakeGateway:
             return self.raw
         data = json.loads(messages[-1]['content'])
         article, policy = data['sources'][0], data['sources'][-1]
-        return json.dumps({'abstain': False, 'category_id': data['taxonomy'][0]['category_id'], 'priority': 'normal',
+        result = {'abstain': False, 'category_id': data['taxonomy'][0]['category_id'], 'priority': 'normal',
                            'category_rationale': 'The request concerns a billing charge.', 'priority_rationale': 'The product is working normally.',
                            'category_evidence': [{'chunk_id': article['chunk_id'], 'quote': 'Duplicate charges belong to Billing.'}],
-                           'priority_evidence': [{'chunk_id': policy['chunk_id'], 'quote': 'Routine billing requests have normal priority.'}]})
+                           'priority_evidence': [{'chunk_id': policy['chunk_id'], 'quote': 'Routine billing requests have normal priority.'}]}
+        if 'answer' in schema.get('properties', {}):
+            result.update(answer='An approved refund can take five to ten business days.',
+                answer_evidence=[{'chunk_id':article['chunk_id'],'quote':'An approved refund can take five to ten business days.'}],
+                requires_human=False, reason_code='none')
+        return json.dumps(result)
 
 
 class FakeStore:

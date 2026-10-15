@@ -33,8 +33,12 @@ export function Recommendation({ selected }: { selected?: Run }) {
                   : "Needs review"}
             </span>
             <span>
-              {selected.method === "rag" ? "RAG" : "Rules baseline"} ·{" "}
-              {selected.model}
+              {selected.method === "rules"
+                ? "Rules baseline"
+                : selected.method === "rag"
+                  ? "RAG"
+                  : "AI resolution"}{" "}
+              · {selected.model}
             </span>
             <span>
               {selected.payload.latency_ms !== undefined
@@ -75,7 +79,7 @@ export function Recommendation({ selected }: { selected?: Run }) {
                     <strong>{s.value}</strong>
                     <span className="evidence-score">
                       {scoreLabel(selected.payload.scores[s.key])}{" "}
-                      {selected.method === "rag"
+                      {selected.method !== "rules"
                         ? "evidence support"
                         : "rule strength"}
                     </span>

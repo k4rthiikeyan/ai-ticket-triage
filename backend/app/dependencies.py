@@ -9,9 +9,11 @@ from .config import DEMO_USERNAME
 from .models import Admin, LoginSession, RecommendationRun, Ticket, Workspace, now
 from .services.workspaces import workspace_id, cleanup_expired
 from .services.usage import consume
+from .jobs import recover_overdue
 def database(request: Request):
     with Session(request.app.state.engine, expire_on_commit=False) as session:
         cleanup_expired(session)
+        recover_overdue(session, request.app.state.settings)
         session.commit()
         yield session
 

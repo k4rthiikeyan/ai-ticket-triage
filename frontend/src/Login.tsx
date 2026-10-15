@@ -10,6 +10,7 @@ import {
 import { api, post, setCsrf } from "./api";
 
 import { ErrorBox } from "./ui";
+import { Link } from "react-router-dom";
 
 export function Login({
   onLogin,
@@ -73,14 +74,17 @@ export function Login({
           </span>
           Triage Desk
         </div>
-        <span className="story-label">LESS SORTING. MORE SUPPORT.</span>
+        <span className="story-label">
+          AUTOMATIC ANSWERS. HUMAN ACCOUNTABILITY.
+        </span>
         <h1>
-          Every request.
-          <br />A clearer next step.
+          Help that moves.
+          <br />
+          People when it matters.
         </h1>
         <p>
-          A thoughtful support workspace that connects tickets to your
-          knowledge, then puts the decision in your hands.
+          Give customers grounded answers in their own support portal. Bring
+          your team in for exceptions, and keep every outcome open to review.
         </p>
         <div className="story-cards">
           <div>
@@ -90,8 +94,8 @@ export function Login({
           </div>
           <div>
             <ShieldCheck size={20} />
-            <strong>Always a human decision</strong>
-            <span>Review, correct, and confirm.</span>
+            <strong>Human help when required</strong>
+            <span>Review exceptions. Improve any answer.</span>
           </div>
         </div>
         <div className="story-footer">
@@ -145,6 +149,10 @@ export function Login({
               </p>
             </section>
           )}
+          <Link to="/support" className="button wide">
+            I need help · Customer portal
+            <ArrowRight size={17} />
+          </Link>
           <form onSubmit={submit}>
             <label>
               Username

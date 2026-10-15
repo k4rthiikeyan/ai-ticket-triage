@@ -1,6 +1,5 @@
 import hashlib
 from contextlib import asynccontextmanager
-from datetime import timedelta
 from pathlib import Path
 from threading import Lock
 from urllib.parse import urlsplit
@@ -8,14 +7,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlmodel import Session
 from .config import Settings, get_settings
 from .db import make_engine, migrate
-from .models import Job, now
 from .seed import seed
 from .rag import OpenRouterGateway, VectorStore
-from .routes import auth, system, taxonomy, tickets, knowledge
+from .routes import auth, system, taxonomy, tickets, knowledge, portal
 from .services.workspaces import shorten_legacy_sessions, cleanup_expired
+from .jobs import recover_overdue
 
 
 def create_app(settings: Settings | None = None, gateway=None, store=None, frontend_dir=None):
@@ -30,13 +29,7 @@ def create_app(settings: Settings | None = None, gateway=None, store=None, front
         with Session(engine) as session:
             shorten_legacy_sessions(session, settings)
             cleanup_expired(session)
-            cutoff = now() - timedelta(seconds=settings.job_timeout + settings.inference_timeout + 30)
-            for job in session.exec(select(Job).where(Job.status.in_(['queued', 'running']), Job.created_at < cutoff)).all():
-                job.status = 'failed'
-                job.error = 'This operation exceeded its time limit or was interrupted. Retry explicitly.'
-                job.progress = 'Interrupted by restart'
-                job.finished_at = now()
-                session.add(job)
+            recover_overdue(session, settings)
             session.commit()
         yield
         if hasattr(app.state.gateway, 'close'):
@@ -74,7 +67,7 @@ def create_app(settings: Settings | None = None, gateway=None, store=None, front
         return {'status': 'ok'}
 
 
-    for feature in (auth, system, taxonomy, tickets, knowledge):
+    for feature in (auth, system, taxonomy, tickets, knowledge, portal):
         feature.register(app)
     dist = Path(frontend_dir) if frontend_dir is not None else Path(__file__).resolve().parents[2] / 'frontend' / 'dist'
     if (dist / 'index.html').is_file() and (dist / 'assets').is_dir():

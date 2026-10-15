@@ -58,6 +58,31 @@ class Ticket(SQLModel, table=True):
     queue_id: int | None = Field(default=None, foreign_key='queue.id')
     created_at: datetime = Field(default_factory=now)
     updated_at: datetime = Field(default_factory=now)
+    customer_id: str | None = Field(default=None, index=True)
+    resolution_state: str = Field(default='unprocessed', index=True)
+    outcome_version: int = 0
+    review_reason: str = ''
+    review_note: str = ''
+    answer: str = ''
+    draft_run_id: str | None = None
+
+
+class CustomerSession(SQLModel, table=True):
+    token_hash: str = Field(primary_key=True)
+    customer_id: str = Field(unique=True, index=True)
+    workspace_id: int = Field(default=1, index=True)
+    csrf_token: str
+    expires_at: datetime = Field(index=True)
+
+
+class TicketMessage(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    ticket_id: int = Field(foreign_key='ticket.id', index=True)
+    author: str
+    kind: str
+    body: str
+    citations: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=now)
 
 
 class TicketRevision(SQLModel, table=True):
