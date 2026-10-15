@@ -123,7 +123,7 @@ def test_index_lifecycle_article_revisions_and_archive(signed):
     assert client.get('/api/system').json()['index_ready']
     article = client.post('/api/articles', json={'title': 'Synthetic article', 'body': 'A new support policy describing a billing question for this fictional demo.'}).json()
     assert not client.get('/api/system').json()['index_ready']
-    assert client.post('/api/tickets/1/triage').status_code == 409
+    assert client.post('/api/tickets/1/triage').status_code == 404
     assert client.patch('/api/articles/' + article['id'], json={'expected_revision': 1, 'title': article['title'], 'body': article['body'] + ' Updated.', 'active': False}).json()['revision'] == 2
     assert len(client.get('/api/articles/' + article['id'] + '/revisions').json()) == 2
     assert client.patch('/api/articles/' + article['id'], json={'expected_revision': 1, 'title': article['title'], 'body': article['body']}).status_code == 409
@@ -220,6 +220,7 @@ def test_background_operations_are_serialized(signed, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     app, client, gateway, _, _ = signed
     started, release = Event(), Event()
+    ticket = create_ticket(client)
 
     def blocking_embed(texts):
         started.set()
@@ -231,7 +232,7 @@ def test_background_operations_are_serialized(signed, monkeypatch):
         pending = executor.submit(client.post, '/api/knowledge/reindex')
         try:
             assert started.wait(2)
-            assert client.post('/api/tickets/1/triage?method=rules').status_code == 409
+            assert client.post(f"/api/tickets/{ticket['id']}/triage?method=rules").status_code == 409
             assert client.post('/api/knowledge/reindex').status_code == 409
         finally:
             release.set()

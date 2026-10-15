@@ -5,8 +5,7 @@ from pathlib import Path
 from pwdlib import PasswordHash
 from sqlalchemy import delete, text
 from sqlmodel import Session, select
-from .models import (Admin, AppState, Queue, Category, Ticket, TicketRevision, Note,
-                     Decision, Job, RecommendationRun, AuditEvent, Article, ArticleRevision)
+from .models import Admin, AppState, Queue, Category, Ticket, TicketRevision, Note, Decision, Job, RecommendationRun, AuditEvent, Article, ArticleRevision
 from .config import Settings, DEMO_USERNAME, DEMO_PASSWORD
 
 CATEGORY_SEEDS = [

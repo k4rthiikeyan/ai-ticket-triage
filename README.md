@@ -2,6 +2,60 @@
 
 A support-ticket triage prototype using **OpenRouter embeddings for RAG search** and **OpenRouter chat completions for the LLM**. Users write their own knowledge and tickets. Suggestions include exact source quotes and become final only after human confirmation.
 
+**[Live demo](https://ai-ticket-triage-chi.vercel.app/)** — select **Try the demo**. Each browser receives an isolated, empty workspace. Add support guidance and an urgency policy, build the index, enter a ticket, and review a cited recommendation before confirming it. Demo workspaces expire after 24 hours; use non-sensitive examples.
+
+## Engineering highlights
+
+- **Traceable decisions:** exact-quote validation, article and ticket revisions, stale-result rejection, explicit acceptance/override, and audit history.
+- **Workspace isolation:** server-selected workspace membership scopes tickets, articles, search indexes, dashboards, and jobs. Guessing another visitor's record ID returns 404. Owner content is preserved separately.
+- **Bounded free usage:** atomic SQL counters work across server instances. Defaults are 40 AI requests per UTC day globally, 8 per minute globally, and 12 per demo workspace per UTC day. Index batches, query embeddings, and completions each count as requests. There is no paid fallback.
+- **Reproducible evaluation:** 24 hand-labelled fixtures covering five categories, all four priorities, unrelated/ambiguous requests, negation, and paraphrases. These fixtures never populate the live application.
+- **Verification:** backend tests, real PostgreSQL integration in CI, frontend tests, and Playwright browser workflows. Model transport is mocked in CI; live-provider results are reported separately.
+
+## Code organization and request flow
+
+`frontend → authenticated feature route → workspace-scoped service → PostgreSQL / OpenRouter → validated recommendation → human confirmation`
+
+```text
+backend/app/
+  main.py             Application assembly, lifecycle, headers, frontend serving
+  dependencies.py     Authentication, CSRF, workspace access checks
+  routes/             Auth, tickets, knowledge, taxonomy, system endpoints
+  services/
+    provider.py       Free-only OpenRouter HTTP requests and validation
+    retrieval.py      Chunking, embedding snapshots, bounded cosine search
+    triage.py         Prompt, evidence validation, abstention, rules baseline
+    workspaces.py     Demo lifecycle, scoped state, expiry cleanup
+    usage.py          Atomic shared usage limits and provider admission
+    records.py        Revision invalidation, audit, presentation helpers
+  jobs.py             Serialized admission and recoverable request-bound jobs
+  models.py           SQL entities
+  schemas.py          Input and generated-output validation
+backend/migrations/   Versioned schema upgrades
+frontend/src/         Separate page, search, recommendation, and form components
+evaluation/           Isolated fixtures, runners, and measured results
+tests/                API, isolation, concurrency, migration, and RAG checks
+```
+
+The frontend context lives separately from the application shell, avoiding page-to-shell import cycles. Page components own their UI state; the API client owns CSRF and session expiry handling. No microservices or extra paid infrastructure are needed for this scope.
+
+## Evaluation and limitations
+
+The checked-in [rules benchmark](evaluation/results/rules.json) measured **20/22 (90.9%) category accuracy**, **20/22 (90.9%) priority accuracy**, correct review on **2/2** unrelated/ambiguous cases, and suggestions on **20/24** cases. Abstaining on a labelled case counts as a miss. Negation and paraphrased billing language remain failures. These numbers describe a small hand-authored rules benchmark, **not LLM accuracy or production performance**.
+
+Run `python -m evaluation.run --output artifacts/rules-evaluation.json` without an API request. See [evaluation instructions](evaluation/README.md) for the opt-in free-model RAG check, retrieval recall, exact-quote checks, and latency measurements.
+
+Design tradeoffs:
+
+- SQL-stored vectors and bounded in-process cosine search keep this small prototype simple. A growing knowledge base should use a database vector index; adding one now would not establish scalability by itself.
+- Shared routing categories are administrator-managed; visitor tickets, knowledge, and index versions are isolated. Isolation is enforced in application services, not database row-level security. This is a prototype rather than a compliance boundary for sensitive data.
+- A demo workspace lasts 24 hours and its login lasts 8 hours. Reload and renewed login in the same valid browser session preserve it; logout or expiry starts a fresh workspace. Expired data is removed in bounded batches during subsequent demo logins. No paid scheduler is required.
+- One index rebuild or triage runs globally at a time. This is a deliberate bound on free-provider load. Larger workloads need durable workers and a different concurrency policy.
+- Free-provider availability and quota vary. App counters are additional safeguards; they do not measure usage from other apps sharing the same OpenRouter key. The UI reports quota errors and preserves manual/rules workflows.
+- Limits also bound demo writes, new workspace creation, and per-workspace articles/tickets. Visitors cannot change operator settings. This does not replace abuse protection for a large public launch.
+
+Migration `0003` keeps existing content in owner workspace 1 and revokes legacy shared-demo sessions. Existing visitors sign in again to receive isolated workspaces. Database upgrades are tested before release; schema rollback is not an automatic recovery strategy for newly created visitor content.
+
 The prototype is configured for **zero-cost AI and free hosting plans**:
 
 - Embeddings: `nvidia/nemotron-3-embed-1b:free` through OpenRouter.
@@ -44,7 +98,7 @@ Indexing and triage finish **inside the HTTP request**, avoiding background thre
 
 ## First use: bring your own knowledge
 
-For a public project review, set `PUBLIC_DEMO_ENABLED=true` in Vercel Production and redeploy. The login page displays the dedicated `demo` / `try-triage` credentials and a **Try the demo** button. Visitors can try tickets, articles, and free-model triage in the shared workspace; category/queue configuration and provider diagnostics require the administrator. The administrator password is never published. The page labels demo content as public, so use non-sensitive examples. Set the flag to `false` to disable both demo sign-in and existing demo sessions. This adds a visitor account, not seeded tickets or articles.
+For a public project review, set `PUBLIC_DEMO_ENABLED=true` in Vercel Production and redeploy. The login page displays the dedicated `demo` / `try-triage` credentials and a **Try the demo** button. Visitors can try tickets, articles, and free-model triage in their own temporary workspace; category/queue configuration and provider diagnostics require the administrator. The administrator password is never published. Use non-sensitive examples. Set the flag to `false` to disable both demo sign-in and existing demo sessions. This adds visitor access, not seeded tickets or articles.
 
 1. Open **Knowledge base** and write or paste a support article describing your product, supported categories, and routing guidance. Save it.
 2. Create a separate article, check **Use as urgency policy**, and define when your team assigns `low`, `normal`, `high`, or `urgent`. Save it. No default policy is fabricated.

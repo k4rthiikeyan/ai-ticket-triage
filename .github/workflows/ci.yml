@@ -30,6 +30,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
+      - run: python -m evaluation.run --output artifacts/rules-evaluation.json
       - run: npm ci --prefix frontend
       - run: npm run build --prefix frontend
       - run: npm test --prefix frontend

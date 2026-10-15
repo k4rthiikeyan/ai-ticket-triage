@@ -1,10 +1,11 @@
 import argparse
-from sqlmodel import Session, select
+from threading import Lock
+from types import SimpleNamespace
 from .config import get_settings
 from .db import make_engine, migrate
-from .models import AppState, Article
 from .seed import seed
 from .rag import OpenRouterGateway, VectorStore
+from .jobs import enqueue
 
 
 def main():
@@ -21,17 +22,12 @@ def main():
             return
         gateway = OpenRouterGateway(settings)
         try:
-            with Session(engine) as session:
-                state = session.get(AppState, 1)
-                articles = session.exec(select(Article).where(Article.active == True)).all()
-                if not any(a.is_policy for a in articles):
-                    raise ValueError('Add an urgency policy in Knowledge base before indexing.')
-                index, count = VectorStore(engine, settings.max_index_chunks).build(articles, gateway, print)
-                state.index_id, state.index_knowledge_version = index, state.knowledge_version
-                state.embedding_model = settings.embedding_model
-                session.add(state)
-                session.commit()
-                print(f'Activated {index}: {count} chunks.')
+            app = SimpleNamespace(state=SimpleNamespace(engine=engine, settings=settings, gateway=gateway,
+                store=VectorStore(engine, settings.max_index_chunks), busy=False, job_lock=Lock()))
+            result = enqueue(app, 'reindex')
+            if result['status'] != 'succeeded':
+                raise ValueError(result['error'])
+            print(f"Activated {result['result']['index_id']}: {result['result']['chunks']} chunks.")
         finally:
             gateway.close()
     finally:

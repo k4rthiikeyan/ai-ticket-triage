@@ -1,198 +1,35 @@
+import { Recommendation } from "./Recommendation";
 import {
   useCallback,
-  useDeferredValue,
   useEffect,
   useRef,
   useState,
   type FormEvent,
 } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   Plus,
-  Search,
   ArrowLeft,
   ArrowRight,
   Sparkles,
   GitCompareArrows,
-  BookOpen,
   Check,
   ChevronDown,
   Pencil,
   MessageSquare,
   History,
-  ShieldCheck,
   AlertTriangle,
-  LoaderCircle,
 } from "lucide-react";
-import { api, post, patch, dateLabel, scoreLabel } from "./api";
-import { useWorkspace } from "./App";
-import {
-  Badge,
-  ErrorBox,
-  Loading,
-  PageHeading,
-  TicketTable,
-  Empty,
-} from "./ui";
-import type { Ticket, TicketDetail, Job, Priority } from "./types";
+import { api, post, patch, dateLabel } from "./api";
+import { useWorkspace } from "./workspace";
+import { Badge, ErrorBox, Loading } from "./ui";
+import type { TicketDetail, Job, Priority } from "./types";
 import { priorities } from "./types";
-
-export function TicketsPage() {
-  const { taxonomy, dashboard, newTicket, lastJob } = useWorkspace();
-  const [params, setParams] = useSearchParams();
-  const status = params.get("status") || "";
-  const [query, setQuery] = useState(""),
-    [category, setCategory] = useState(""),
-    [priority, setPriority] = useState(""),
-    [queue, setQueue] = useState(""),
-    [offset, setOffset] = useState(0),
-    [data, setData] = useState<{ items: Ticket[]; total: number } | null>(null),
-    [error, setError] = useState("");
-  const deferred = useDeferredValue(query);
-  useEffect(() => {
-    setOffset(0);
-  }, [deferred, status, category, priority, queue]);
-  useEffect(() => {
-    let live = true;
-    const p = new URLSearchParams({
-      q: deferred,
-      status,
-      priority,
-      offset: String(offset),
-    });
-    if (category) p.set("category_id", category);
-    if (queue) p.set("queue_id", queue);
-    api<{ items: Ticket[]; total: number }>("/tickets?" + p)
-      .then((d) => {
-        if (live) {
-          setData(d);
-          setError("");
-        }
-      })
-      .catch((e) => {
-        if (live) setError(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [deferred, status, category, priority, queue, offset, lastJob]);
-  return (
-    <>
-      <PageHeading
-        eyebrow="TEAM INBOX"
-        title="All tickets"
-        description="One place to review, categorize, and route every request."
-        action={
-          <button className="button primary" onClick={newTicket}>
-            <Plus size={17} />
-            New ticket
-          </button>
-        }
-      />
-      <section className="card">
-        <div className="ticket-tabs">
-          {[
-            ["", "All tickets", dashboard?.total],
-            ["new", "New", dashboard?.status.new],
-            ["open", "Open", dashboard?.status.open],
-            ["resolved", "Resolved", dashboard?.status.resolved],
-          ].map(([value, label, count]) => (
-            <button
-              key={String(value)}
-              className={status === value ? "active" : ""}
-              onClick={() => setParams(value ? { status: String(value) } : {})}
-            >
-              {label}
-              <span>{count || 0}</span>
-            </button>
-          ))}
-        </div>
-        <div className="filter-bar">
-          <div className="search-field">
-            <Search size={17} />
-            <input
-              aria-label="Search tickets"
-              placeholder="Search by subject, message, or ticket ID…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-          <select
-            aria-label="Filter category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            <option value="">All categories</option>
-            {taxonomy.categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.active ? "" : " (archived)"}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Filter priority"
-            value={priority}
-            onChange={(e) => setPriority(e.target.value)}
-          >
-            <option value="">All priorities</option>
-            {priorities.map((p) => (
-              <option key={p} value={p}>
-                {p.charAt(0).toUpperCase() + p.slice(1)}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Filter queue"
-            value={queue}
-            onChange={(e) => setQueue(e.target.value)}
-          >
-            <option value="">All queues</option>
-            {taxonomy.queues.map((q) => (
-              <option key={q.id} value={q.id}>
-                {q.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <ErrorBox message={error} />
-        {data ? (
-          <TicketTable tickets={data.items} />
-        ) : (
-          <Loading text="Loading tickets…" />
-        )}
-        <div className="pagination">
-          <span className="muted small">
-            {data?.total
-              ? `${offset + 1}–${Math.min(offset + 25, data.total)} of ${data.total} tickets`
-              : "0 tickets"}
-          </span>
-          <div>
-            <button
-              className="button small-button"
-              disabled={offset === 0}
-              onClick={() => setOffset(Math.max(0, offset - 25))}
-            >
-              Previous
-            </button>
-            <button
-              className="button small-button"
-              disabled={!data || offset + 25 >= data.total}
-              onClick={() => setOffset(offset + 25)}
-            >
-              Next
-              <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
-      </section>
-    </>
-  );
-}
 
 export function TicketPage() {
   const { id } = useParams();
-  const { taxonomy, system, startJob, lastJob, refresh } = useWorkspace();
+  const { taxonomy, system, startJob, lastJob, refresh, isDemo } =
+    useWorkspace();
   const [detail, setDetail] = useState<TicketDetail | null>(null),
     [selectedId, setSelectedId] = useState(""),
     [error, setError] = useState(""),
@@ -509,145 +346,7 @@ export function TicketPage() {
                 </select>
               </div>
             )}
-            {selected ? (
-              <div className="recommendation">
-                <div className="recommendation-meta">
-                  <span
-                    className={
-                      "badge " +
-                      (selected.outcome === "suggested"
-                        ? "open"
-                        : selected.outcome === "failed"
-                          ? "urgent"
-                          : "new")
-                    }
-                  >
-                    {selected.outcome === "suggested"
-                      ? "Suggested"
-                      : selected.outcome === "failed"
-                        ? "Failed"
-                        : "Needs review"}
-                  </span>
-                  <span>
-                    {selected.method === "rag" ? "RAG" : "Rules baseline"} ·{" "}
-                    {selected.model}
-                  </span>
-                  <span>
-                    {selected.payload.latency_ms !== undefined
-                      ? selected.payload.latency_ms + " ms"
-                      : ""}
-                  </span>
-                </div>
-                {selected.stale && (
-                  <div className="warning-box">
-                    This result is stale. Rerun triage or record a fresh manual
-                    decision.
-                  </div>
-                )}
-                {suggestion ? (
-                  <>
-                    <div className="suggestion-grid">
-                      {[
-                        {
-                          key: "category",
-                          label: "Category",
-                          value: categoryName(suggestion.category_id),
-                        },
-                        {
-                          key: "priority",
-                          label: "Priority",
-                          value:
-                            suggestion.priority.charAt(0).toUpperCase() +
-                            suggestion.priority.slice(1),
-                        },
-                        {
-                          key: "queue",
-                          label: "Queue",
-                          value: queueName(suggestion.queue_id),
-                        },
-                      ].map((s) => (
-                        <div key={s.key}>
-                          <span className="eyebrow">{s.label}</span>
-                          <strong>{s.value}</strong>
-                          <span className="evidence-score">
-                            {scoreLabel(selected.payload.scores[s.key])}{" "}
-                            {selected.method === "rag"
-                              ? "evidence support"
-                              : "rule strength"}
-                          </span>
-                          <p>{selected.payload.rationales[s.key]}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="score-note">
-                      <ShieldCheck size={14} />
-                      Heuristic scores are not probabilities of correctness.
-                      Review the rationale and evidence.
-                    </p>
-                  </>
-                ) : (
-                  <div className="review-message">
-                    {selected.payload.error ||
-                      selected.payload.rationales.review}
-                  </div>
-                )}
-                {selected.payload.citations.length > 0 && (
-                  <div className="evidence-list">
-                    <h3>
-                      <BookOpen size={16} />
-                      Supporting evidence
-                    </h3>
-                    {selected.payload.citations.map((source, i) => (
-                      <div
-                        className="source-card"
-                        key={source.chunk_id + source.field + i}
-                      >
-                        <div>
-                          <strong>{source.title}</strong>
-                          <span className="subtle-label">{source.field}</span>
-                        </div>
-                        <blockquote>“{source.quote}”</blockquote>
-                        <div className="source-meta">
-                          Article v{source.article_revision} · Similarity{" "}
-                          {source.similarity.toFixed(3)} · {source.chunk_id}
-                        </div>
-                        <details>
-                          <summary>View indexed source text</summary>
-                          <p className="pre-wrap">{source.text}</p>
-                        </details>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {selected.payload.retrieved.length > 0 && (
-                  <details className="retrieval-details">
-                    <summary>
-                      Retrieved context · {selected.payload.retrieved.length}{" "}
-                      chunks
-                      <ChevronDown size={14} />
-                    </summary>
-                    {selected.payload.retrieved.map((s) => (
-                      <div className="retrieved-row" key={s.chunk_id}>
-                        <strong>{s.title}</strong>
-                        <span>Cosine similarity {s.similarity.toFixed(3)}</span>
-                        <p className="pre-wrap">{s.text}</p>
-                      </div>
-                    ))}
-                  </details>
-                )}
-                <div className="run-footnote">
-                  Request v{selected.ticket_revision} ·{" "}
-                  {selected.index_version
-                    ? "Index " + selected.index_version.slice(-8)
-                    : "No retrieval index"}
-                </div>
-              </div>
-            ) : (
-              <Empty
-                title="Ready for a clearer next step"
-                description="Run RAG triage to retrieve sources and generate a recommendation, or compare the rules baseline."
-              />
-            )}
+            <Recommendation selected={selected} />
           </section>
           <section className="card">
             <div className="card-header">
@@ -680,7 +379,8 @@ export function TicketPage() {
                 <span className="avatar">A</span>
                 <div>
                   <strong>
-                    Administrator <time>{dateLabel(n.created_at)}</time>
+                    {isDemo ? "Demo visitor" : "Administrator"}{" "}
+                    <time>{dateLabel(n.created_at)}</time>
                   </strong>
                   <p className="pre-wrap">{n.body}</p>
                 </div>

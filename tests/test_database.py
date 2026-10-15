@@ -12,10 +12,12 @@ def test_postgres_migrations_compile_without_sqlite_specific_sql():
     with Operations.context(context):
         import_module('backend.migrations.versions.0001_initial').upgrade()
         import_module('backend.migrations.versions.0002_knowledge_chunks').upgrade()
+        import_module('backend.migrations.versions.0003_isolated_workspaces').upgrade()
     sql = output.getvalue()
     assert 'CREATE TABLE knowledgechunk' in sql
     assert 'CREATE INDEX ix_knowledgechunk_index_id' in sql
     assert 'PRAGMA' not in sql
+    assert 'CREATE TABLE workspace' in sql and 'CREATE TABLE usagebucket' in sql
 
 
 def test_hosted_url_alias_and_psycopg_driver(monkeypatch):

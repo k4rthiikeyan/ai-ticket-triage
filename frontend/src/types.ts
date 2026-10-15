@@ -107,6 +107,7 @@ export interface Job {
   result: Record<string, unknown>;
 }
 export interface System {
+  demo_limits: { ai_requests_per_day: number; ai_remaining_today: number; tickets: number; articles: number; workspace_hours: number };
   index_ready: boolean;
   index_id: string | null;
   knowledge_version: number;

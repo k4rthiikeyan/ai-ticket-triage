@@ -1,5 +1,50 @@
 import { test, expect } from "@playwright/test";
 
+test("separate demo browsers cannot see each other's ticket", async ({
+  browser,
+}) => {
+  const first = await browser.newContext();
+  const second = await browser.newContext();
+  try {
+    const one = await first.newPage();
+    const two = await second.newPage();
+    for (const page of [one, two]) {
+      await page.goto("/");
+      await page
+        .getByRole("button", { name: "Try the demo", exact: true })
+        .click();
+      await expect(
+        page.getByText("Your tickets and knowledge are isolated", {
+          exact: false,
+        }),
+      ).toBeVisible();
+    }
+    await one.getByRole("button", { name: "New ticket", exact: true }).click();
+    await one
+      .getByLabel("Subject", { exact: true })
+      .fill("Visitor isolation browser check");
+    await one
+      .getByLabel("Customer request")
+      .fill("This ticket belongs only to the first browser visitor.");
+    await one
+      .getByRole("button", { name: "Create ticket", exact: true })
+      .click();
+    await expect(
+      one.getByRole("heading", { name: "Customer request", exact: true }),
+    ).toBeVisible();
+    const privateUrl = one.url();
+    await two.goto(privateUrl);
+    await expect(two.getByRole("alert")).toContainText("Ticket not found");
+    await one.reload();
+    await expect(
+      one.getByRole("heading", { name: "Customer request", exact: true }),
+    ).toBeVisible();
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
 test("public credentials allow a demo visit with administrator settings protected", async ({
   page,
 }) => {

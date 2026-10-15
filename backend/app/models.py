@@ -13,11 +13,19 @@ class Admin(SQLModel, table=True):
     password_hash: str
 
 
+class Workspace(SQLModel, table=True):
+    __table_args__ = {'sqlite_autoincrement': True}
+    id: int | None = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=now)
+    expires_at: datetime | None = Field(default=None, index=True)
+
+
 class LoginSession(SQLModel, table=True):
     token_hash: str = Field(primary_key=True)
     admin_id: int = Field(foreign_key='admin.id')
     csrf_token: str
     expires_at: datetime
+    workspace_id: int = Field(default=1)
 
 
 class Queue(SQLModel, table=True):
@@ -37,6 +45,7 @@ class Category(SQLModel, table=True):
 
 class Ticket(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    workspace_id: int = Field(default=1, index=True)
     seed_key: str | None = Field(default=None, unique=True)
     subject: str
     body: str
@@ -69,6 +78,7 @@ class Note(SQLModel, table=True):
 
 class Article(SQLModel, table=True):
     id: str = Field(primary_key=True)
+    workspace_id: int = Field(default=1, index=True)
     title: str
     body: str
     revision: int = 1
@@ -110,6 +120,7 @@ class KnowledgeChunk(SQLModel, table=True):
 
 class Job(SQLModel, table=True):
     id: str = Field(primary_key=True)
+    workspace_id: int = Field(default=1, index=True)
     kind: str
     ticket_id: int | None = Field(default=None, foreign_key='ticket.id')
     status: str = 'queued'
@@ -148,8 +159,15 @@ class Decision(SQLModel, table=True):
 
 class AuditEvent(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    workspace_id: int = Field(default=1, index=True)
     ticket_id: int | None = Field(default=None, foreign_key='ticket.id', index=True)
     actor: str = 'admin'
     action: str
     detail: dict = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=now)
+
+
+class UsageBucket(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    count: int = 0
+    expires_at: datetime = Field(index=True)

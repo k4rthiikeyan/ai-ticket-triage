@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   NavLink,
   Routes,
@@ -21,9 +14,7 @@ import {
   BookOpen,
   Settings2,
   LogOut,
-  Plus,
   ArrowRight,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
   LoaderCircle,
@@ -38,432 +29,16 @@ import type {
   Taxonomy,
   System,
   Job,
-  Ticket,
 } from "./types";
-import { ErrorBox, Loading, PageHeading, Dialog, TicketTable } from "./ui";
-import { TicketsPage, TicketPage } from "./tickets";
-import { KnowledgePage, SettingsPage } from "./knowledge";
-
-type ContextValue = {
-  isDemo: boolean;
-  taxonomy: Taxonomy;
-  system: System | null;
-  dashboard: DashboardData | null;
-  refresh: () => Promise<void>;
-  startJob: (job: Job) => void;
-  lastJob: string;
-  newTicket: () => void;
-};
-const WorkspaceContext = createContext<ContextValue>(null!);
-export const useWorkspace = () => useContext(WorkspaceContext);
-
-function Login({
-  onLogin,
-}: {
-  onLogin: (username: string, isDemo: boolean) => void;
-}) {
-  const [username, setUsername] = useState("admin"),
-    [password, setPassword] = useState(""),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
-  const [demo, setDemo] = useState<{
-    enabled: boolean;
-    username?: string;
-    password?: string;
-  } | null>(null);
-  useEffect(() => {
-    let live = true;
-    api<{ enabled: boolean; username?: string; password?: string }>(
-      "/auth/demo",
-    )
-      .then((data) => {
-        if (live) setDemo(data);
-      })
-      .catch(() => {
-        if (live)
-          setError(
-            "Demo access could not be loaded. Refresh the page or use your workspace credentials.",
-          );
-      });
-    return () => {
-      live = false;
-    };
-  }, []);
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    await signIn(username, password);
-  }
-  async function signIn(loginUsername: string, loginPassword: string) {
-    setBusy(true);
-    setError("");
-    try {
-      const data = await post<{
-        username: string;
-        csrf_token: string;
-        is_demo: boolean;
-      }>("/auth/login", { username: loginUsername, password: loginPassword });
-      setCsrf(data.csrf_token);
-      onLogin(data.username, Boolean(data.is_demo));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <main className="login-page">
-      <section className="login-story">
-        <div className="brand">
-          <span className="brand-mark">
-            <Layers3 size={23} />
-          </span>
-          Triage Desk
-        </div>
-        <span className="story-label">LESS SORTING. MORE SUPPORT.</span>
-        <h1>
-          Every request.
-          <br />A clearer next step.
-        </h1>
-        <p>
-          A thoughtful support workspace that connects tickets to your
-          knowledge, then puts the decision in your hands.
-        </p>
-        <div className="story-cards">
-          <div>
-            <BookOpen size={20} />
-            <strong>Grounded in your knowledge</strong>
-            <span>Relevant articles, visible sources.</span>
-          </div>
-          <div>
-            <ShieldCheck size={20} />
-            <strong>Always a human decision</strong>
-            <span>Review, correct, and confirm.</span>
-          </div>
-        </div>
-        <div className="story-footer">
-          Your requests · Your knowledge · OpenRouter-powered triage
-        </div>
-      </section>
-      <section className="login-form">
-        <div className="login-form-inner">
-          <span className="eyebrow">YOUR SUPPORT WORKSPACE</span>
-          <h2>{demo?.enabled ? "Take a look around" : "Welcome back"}</h2>
-          <p className="muted">
-            {demo?.enabled
-              ? "Try the demo, or sign in with your workspace account."
-              : "Sign in to review your team’s requests."}
-          </p>
-          {demo?.enabled && demo.username && demo.password && (
-            <section className="demo-access" aria-label="Public demo access">
-              <strong>Explore the public demo</strong>
-              <p>No account needed. Try the workspace for yourself.</p>
-              <dl>
-                <div>
-                  <dt>Username</dt>
-                  <dd>
-                    <code>{demo.username}</code>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Password</dt>
-                  <dd>
-                    <code>{demo.password}</code>
-                  </dd>
-                </div>
-              </dl>
-              <button
-                type="button"
-                className="button primary wide"
-                disabled={busy}
-                onClick={() => {
-                  void signIn(demo.username!, demo.password!);
-                }}
-              >
-                Try the demo <ArrowRight size={17} />
-              </button>
-              <p className="demo-access-note">
-                Shared public workspace. Use non-sensitive examples. Free AI
-                usage limits apply.
-              </p>
-            </section>
-          )}
-          <form onSubmit={submit}>
-            <label>
-              Username
-              <input
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                autoComplete="current-password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </label>
-            <ErrorBox message={error} />
-            <button className="button primary wide" disabled={busy}>
-              {busy ? (
-                <LoaderCircle size={17} className="spin" />
-              ) : (
-                "Sign in to workspace"
-              )}
-              <ArrowRight size={17} />
-            </button>
-          </form>
-          <p className="login-note">
-            Use the administrator username and password configured for this
-            workspace.
-          </p>
-        </div>
-      </section>
-    </main>
-  );
-}
-
-function CreateTicket({ close }: { close: () => void }) {
-  const [subject, setSubject] = useState(""),
-    [body, setBody] = useState(""),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
-  const navigate = useNavigate();
-  const { refresh } = useWorkspace();
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const ticket = await post<Ticket>("/tickets", { subject, body });
-      await refresh();
-      close();
-      navigate("/tickets/" + ticket.id);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Dialog title="Create a support ticket" onClose={close}>
-      <p className="muted">
-        Type a request to try triage using your knowledge base. The original
-        text is preserved.
-      </p>
-      <form onSubmit={submit}>
-        <label>
-          Subject
-          <input
-            autoFocus
-            placeholder="A short summary of the request"
-            minLength={3}
-            maxLength={180}
-            required
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-          />
-        </label>
-        <label>
-          Customer request
-          <textarea
-            placeholder="Describe the issue, its impact, and any useful context…"
-            rows={7}
-            minLength={10}
-            maxLength={12000}
-            required
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
-        </label>
-        <ErrorBox message={error} />
-        <div className="form-actions">
-          <button type="button" className="button" onClick={close}>
-            Cancel
-          </button>
-          <button className="button primary" disabled={busy}>
-            {busy ? "Saving…" : "Create ticket"}
-            <ArrowRight size={16} />
-          </button>
-        </div>
-      </form>
-    </Dialog>
-  );
-}
-
-function DashboardPage() {
-  const { dashboard, system, newTicket } = useWorkspace();
-  if (!dashboard) return <Loading />;
-  const metrics = [
-    {
-      label: "New tickets",
-      value: dashboard.status.new,
-      icon: Inbox,
-      description: "Waiting for triage",
-      tone: "green",
-    },
-    {
-      label: "Open tickets",
-      value: dashboard.status.open,
-      icon: LoaderCircle,
-      description: "In your team’s queue",
-      tone: "blue",
-    },
-    {
-      label: "Resolved tickets",
-      value: dashboard.status.resolved,
-      icon: CheckCircle2,
-      description: "Reviewed and completed",
-      tone: "purple",
-    },
-    {
-      label: "Total tickets",
-      value: dashboard.total,
-      icon: Layers3,
-      description: "Across your workspace",
-      tone: "gray",
-    },
-  ];
-  return (
-    <>
-      <PageHeading
-        eyebrow="WORKSPACE OVERVIEW"
-        title="A clearer view of your queue."
-        description="Track incoming requests, review recommendations, and keep support moving."
-        action={
-          <button className="button primary" onClick={newTicket}>
-            <Plus size={17} />
-            New ticket
-          </button>
-        }
-      />
-      <div className="metrics">
-        {metrics.map((m) => (
-          <div className="metric card" key={m.label}>
-            <div className="metric-top">
-              <span>{m.label}</span>
-              <span className={"metric-icon " + m.tone}>
-                <m.icon size={19} />
-              </span>
-            </div>
-            <strong>{m.value}</strong>
-            <span className="muted small">{m.description}</span>
-          </div>
-        ))}
-      </div>
-      <div className="workspace-banner">
-        <div className="banner-icon">
-          <Sparkles size={22} />
-        </div>
-        <div>
-          <strong>
-            {dashboard.total === 0
-              ? "Try triage with your own requests."
-              : "Recommendations with a reason."}
-          </strong>
-          <p>
-            {dashboard.total === 0
-              ? "Add your support articles and urgency policy, rebuild the index, then create a ticket and run triage."
-              : "Retrieve relevant knowledge. Inspect the evidence. Make the final call."}
-          </p>
-        </div>
-        <Link to="/knowledge" className="button">
-          {system?.index_ready
-            ? "Explore knowledge"
-            : "Build your knowledge index"}
-          <ArrowUpRight size={15} />
-        </Link>
-      </div>
-      <div className="dashboard-grid">
-        <section className="card">
-          <div className="card-header">
-            <div>
-              <h2>Tickets by category</h2>
-              <p>Confirmed labels across the workspace</p>
-            </div>
-            <span className="subtle-label">{dashboard.total} tickets</span>
-          </div>
-          <div className="bar-list">
-            {dashboard.categories.map((c, i) => (
-              <div className="bar-row" key={c.name}>
-                <div>
-                  <span>{c.name}</span>
-                  <strong>{c.count}</strong>
-                </div>
-                <div className="bar-track">
-                  <span
-                    className={
-                      i === dashboard.categories.length - 1 ? "neutral" : ""
-                    }
-                    style={{
-                      width:
-                        Math.max(
-                          0,
-                          (c.count / Math.max(dashboard.total, 1)) * 100,
-                        ) + "%",
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="card">
-          <div className="card-header">
-            <div>
-              <h2>Priority breakdown</h2>
-              <p>Human-confirmed urgency</p>
-            </div>
-          </div>
-          <div className="priority-list">
-            {dashboard.priorities.map((p) => (
-              <div key={p.name}>
-                <span>
-                  <i className={"priority-dot " + p.name.toLowerCase()} />
-                  {p.name.charAt(0).toUpperCase() + p.name.slice(1)}
-                </span>
-                <strong>{p.count}</strong>
-                <span className="muted">
-                  {Math.round((p.count / Math.max(dashboard.total, 1)) * 100)}%
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="card-footer">
-            <ShieldCheck size={15} />
-            Suggestions count only after confirmation.
-          </div>
-        </section>
-      </div>
-      <section className="card recent-card">
-        <div className="card-header">
-          <div>
-            <h2>Recent activity</h2>
-            <p>The latest requests in your support workspace</p>
-          </div>
-          <Link className="text-link" to="/tickets">
-            View all tickets
-            <ArrowRight size={15} />
-          </Link>
-        </div>
-        <TicketTable tickets={dashboard.recent} />
-      </section>
-      <div className="queue-strip">
-        {dashboard.queues.map((q) => (
-          <div key={q.name}>
-            <span className="muted">{q.name}</span>
-            <strong>{q.count} active</strong>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
-
+import { ErrorBox, Loading, PageHeading } from "./ui";
+import { WorkspaceContext } from "./workspace";
+import { Login } from "./Login";
+import { CreateTicket } from "./CreateTicket";
+import { DashboardPage } from "./DashboardPage";
+import { TicketsPage } from "./TicketsPage";
+import { TicketPage } from "./TicketPage";
+import { KnowledgePage } from "./KnowledgePage";
+import { SettingsPage } from "./SettingsPage";
 export default function App() {
   const [user, setUser] = useState<string | null>(null),
     [isDemo, setIsDemo] = useState(false),
@@ -636,7 +211,7 @@ export default function App() {
             <div>
               <strong>Your support workspace</strong>
               <span>
-                {isDemo ? "Shared public demo" : "Single-team workspace"}
+                {isDemo ? "Your demo workspace" : "Single-team workspace"}
               </span>
             </div>
           </div>
@@ -712,8 +287,14 @@ export default function App() {
             {isDemo && (
               <div className="info-strip">
                 <ShieldCheck size={17} />
-                Shared public demo: tickets and knowledge are visible to all
-                visitors. Use non-sensitive examples.
+                <span>
+                  Your tickets and knowledge are isolated from other visitors.
+                  This workspace expires after{" "}
+                  {system?.demo_limits.workspace_hours ?? 24} hours.{" "}
+                  {system?.demo_limits.ai_remaining_today ?? "—"} free AI
+                  requests available today; indexing, search, and triage share
+                  this allowance. Use non-sensitive examples.
+                </span>
               </div>
             )}
             <ErrorBox message={workspaceError} />
@@ -752,7 +333,7 @@ export default function App() {
             <footer className="page-footer">
               <span>
                 Triage Desk <span>·</span>{" "}
-                {isDemo ? "Public demo workspace" : "Support workspace"}
+                {isDemo ? "Your demo workspace" : "Support workspace"}
               </span>
               <a href="/api/docs" target="_blank" rel="noreferrer">
                 API documentation

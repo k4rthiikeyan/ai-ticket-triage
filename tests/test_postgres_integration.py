@@ -11,6 +11,8 @@ from backend.app.db import make_engine
 from backend.app.main import create_app
 from backend.app.models import Job
 from .conftest import FakeGateway
+from .test_workspaces import visitor, add_knowledge
+from backend.app.seed import seed
 
 
 @pytest.mark.skipif(not os.environ.get('TEST_POSTGRES_URL'), reason='Disposable Postgres service is not configured')
@@ -21,7 +23,7 @@ def test_full_workflow_and_restart_with_real_postgres():
     with control.begin() as connection:
         connection.execute(text(f'CREATE SCHEMA {schema}'))
     url = make_url(base).update_query_dict({'options': f'-csearch_path={schema}'})
-    settings = Settings(database_url=url.render_as_string(hide_password=False), admin_password='test-password', _env_file=None)
+    settings = Settings(database_url=url.render_as_string(hide_password=False), admin_password='test-password', ai_minute_limit=20, _env_file=None)
     try:
         app = create_app(settings, gateway=FakeGateway())
         with TestClient(app) as client:
@@ -52,6 +54,18 @@ def test_full_workflow_and_restart_with_real_postgres():
             assert other.get('/api/system').json()['index_ready']
             assert other.get(f"/api/tickets/{ticket['id']}").json()['ticket']['status'] == 'open'
             assert other.post('/api/knowledge/search', json={'query': 'Duplicate charge'}).json()['items']
+            settings.public_demo_enabled = True
+            seed(restarted.state.engine, settings)
+            first, second = visitor(restarted), visitor(restarted)
+            add_knowledge(first)
+            assert first.post('/api/knowledge/reindex').json()['status'] == 'succeeded'
+            visitor_ticket = first.post('/api/tickets', json={'subject': 'Visitor duplicate charge', 'body': 'A duplicate charge appeared but everything still works.'}).json()
+            visitor_job = first.post(f"/api/tickets/{visitor_ticket['id']}/triage").json()
+            assert visitor_job['status'] == 'succeeded', visitor_job
+            assert second.get(f"/api/tickets/{visitor_ticket['id']}").status_code == 404
+            assert second.get('/api/jobs/' + visitor_job['id']).status_code == 404
+            assert second.get('/api/articles').json() == []
+            assert not second.get('/api/system').json()['index_ready']
             with Session(restarted.state.engine) as session:
                 session.add(Job(id='other-instance', kind='reindex', status='running'))
                 session.commit()

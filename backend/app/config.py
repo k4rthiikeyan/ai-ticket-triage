@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     auto_migrate: bool = True
     cookie_secure: bool = False
     session_hours: int = 8
+    demo_workspace_hours: int = Field(default=24, ge=1, le=72)
+    ai_daily_limit: int = Field(default=40, ge=1, le=50)
+    ai_minute_limit: int = Field(default=8, ge=1, le=20)
+    demo_ai_daily_limit: int = Field(default=12, ge=1, le=40)
+    demo_ticket_limit: int = Field(default=25, ge=1, le=100)
+    demo_article_limit: int = Field(default=15, ge=2, le=100)
 
     @field_validator('admin_username')
     @classmethod
