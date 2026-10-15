@@ -22,7 +22,7 @@ def evaluate(base_url):
 
         access = get('auth/demo')
         assert access['enabled'], 'Public demo is disabled'
-        auth = post('auth/login', {'username': access['username'], 'password': access['password']})
+        auth = post('auth/login', {'username': access['username'], 'password': access['password'], 'starter_examples': False})
         client.headers['X-CSRF-Token'] = auth['csrf_token']
         assert auth['is_demo'] and get('tickets')['total'] == 0
         system = get('system')

@@ -12,8 +12,8 @@ def enable_demo(workspace):
     return app, client, settings
 
 
-def sign_in_demo(client):
-    response = client.post('/api/auth/login', json={'username': DEMO_USERNAME, 'password': DEMO_PASSWORD})
+def sign_in_demo(client, starter_examples=False):
+    response = client.post('/api/auth/login', json={'username': DEMO_USERNAME, 'password': DEMO_PASSWORD, 'starter_examples': starter_examples})
     assert response.status_code == 200
     assert response.json()['is_demo']
     client.headers['X-CSRF-Token'] = response.json()['csrf_token']

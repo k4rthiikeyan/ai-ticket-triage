@@ -26,6 +26,6 @@ To test the deployed application instead of supplying a local key:
 python -m evaluation.remote https://ai-ticket-triage-chi.vercel.app --output artifacts/deployed-rag-evaluation.json
 ```
 
-This explicitly creates an isolated demo workspace through the normal public API, adds labelled evaluation guidance and three tickets, then measures a refund paraphrase, negation, and an unrelated question. It checks source quotes and persists accepted decisions. It uses up to seven free provider requests and logs out when finished. The temporary workspace expires automatically. Do not use it as a quota-free health check.
+This explicitly creates an empty isolated demo workspace through the normal public API (`starter_examples=false`), adds labelled evaluation guidance and three tickets, then measures a refund paraphrase, negation, and an unrelated question. It checks source quotes and persists accepted decisions. It uses up to seven free provider requests and logs out when finished, which deletes its data and embeddings. Do not use it as a quota-free health check.
 
 To strengthen the benchmark over time, add anonymized, independently labelled tickets; review disagreements; keep a held-out set; and compare prompt/model changes using the same fixtures. Always label live provider results separately from mocked integration tests and the rules baseline.

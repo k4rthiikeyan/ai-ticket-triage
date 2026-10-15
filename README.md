@@ -2,7 +2,7 @@
 
 A support-ticket triage prototype using **OpenRouter embeddings for RAG search** and **OpenRouter chat completions for the LLM**. Users write their own knowledge and tickets. Suggestions include exact source quotes and become final only after human confirmation.
 
-**[Live demo](https://ai-ticket-triage-chi.vercel.app/)** — select **Try the demo**. Each browser receives an isolated, empty workspace. Add support guidance and an urgency policy, build the index, enter a ticket, and review a cited recommendation before confirming it. Demo workspaces expire after 24 hours; use non-sensitive examples.
+**[Live demo](https://ai-ticket-triage-chi.vercel.app/)** — select **Try the demo**. Each browser receives an isolated workspace with **six labelled example articles and three example tickets**. Click **Rebuild index**, open a ticket, and run triage. You can edit the guidance or enter your own requests. Loading examples makes no AI calls; embeddings are generated only when you build the index.
 
 ## Engineering highlights
 
@@ -49,7 +49,8 @@ Design tradeoffs:
 
 - SQL-stored vectors and bounded in-process cosine search keep this small prototype simple. A growing knowledge base should use a database vector index; adding one now would not establish scalability by itself.
 - Shared routing categories are administrator-managed; visitor tickets, knowledge, and index versions are isolated. Isolation is enforced in application services, not database row-level security. This is a prototype rather than a compliance boundary for sensitive data.
-- A demo workspace lasts 24 hours and its login lasts 8 hours. Reload and renewed login in the same valid browser session preserve it; logout or expiry starts a fresh workspace. Expired data is removed in bounded batches during subsequent demo logins. No paid scheduler is required.
+- A demo uses a browser-session cookie, with **30 minutes of sliding inactivity expiry** as a server-side safeguard. Normal navigation, reload and active editing preserve the workspace. **End demo & delete data** removes its tickets, knowledge, embeddings, notes, decisions, revisions, job records and login sessions from the app database. If an AI request is running, the session is revoked immediately and its data is purged when that request finishes. Owner data is preserved. Anonymous quota counters remain until their retention window expires.
+- Browsers do not reliably notify the server when a tab or browser closes, and some restore session cookies. Closing one tab therefore does not guarantee immediate physical deletion. Expired demo data is purged in bounded batches on subsequent API requests; no paid scheduler is required. The app does not send a logout beacon on navigation or reload, which would unexpectedly erase active work. The administrator's separate persistent login default remains eight hours.
 - One index rebuild or triage runs globally at a time. This is a deliberate bound on free-provider load. Larger workloads need durable workers and a different concurrency policy.
 - Free-provider availability and quota vary. App counters are additional safeguards; they do not measure usage from other apps sharing the same OpenRouter key. The UI reports quota errors and preserves manual/rules workflows.
 - Limits also bound demo writes, new workspace creation, and per-workspace articles/tickets. Visitors cannot change operator settings. This does not replace abuse protection for a large public launch.
@@ -69,7 +70,7 @@ Free plans have usage limits. OpenRouter currently documents 20 requests per min
 
 Sources: [NVIDIA free embeddings](https://openrouter.ai/nvidia/nemotron-3-embed-1b:free), [NVIDIA free LLM](https://openrouter.ai/nvidia/nemotron-3-super-120b-a12b:free), [OpenRouter free-model limits](https://openrouter.ai/docs/api_reference/limits), [Vercel Hobby](https://vercel.com/docs/plans/hobby), [Neon Free](https://neon.com/pricing).
 
-There are **no seeded tickets, articles, or fictional product policies**. The administrator and editable category/queue defaults are configuration only. Older installations automatically remove tagged demo tickets and unchanged original demo articles; user-created tickets and edited articles are preserved. The old synthetic evaluation datasets have been removed.
+The owner workspace starts without tickets or knowledge. Temporary demo sessions include clearly labelled fictional starter guidance and tickets to make the workflow easy to try; they are separated from owner data and removed with the session. No AI recommendations or embeddings are fabricated. Older installations automatically remove the original legacy demo records while preserving user-created and edited content. Evaluation fixtures remain separate from starter content.
 
 ## Deploy from GitHub to Vercel
 
@@ -98,7 +99,7 @@ Indexing and triage finish **inside the HTTP request**, avoiding background thre
 
 ## First use: bring your own knowledge
 
-For a public project review, set `PUBLIC_DEMO_ENABLED=true` in Vercel Production and redeploy. The login page displays the dedicated `demo` / `try-triage` credentials and a **Try the demo** button. Visitors can try tickets, articles, and free-model triage in their own temporary workspace; category/queue configuration and provider diagnostics require the administrator. The administrator password is never published. Use non-sensitive examples. Set the flag to `false` to disable both demo sign-in and existing demo sessions. This adds visitor access, not seeded tickets or articles.
+For a public project review, set `PUBLIC_DEMO_ENABLED=true` in Vercel Production and redeploy. The login page displays the dedicated `demo` / `try-triage` credentials and a **Try the demo** button. Visitors receive labelled starter examples in their own temporary workspace; category/queue configuration and provider diagnostics require the administrator. The administrator password is never published. Use non-sensitive examples. Existing empty demo workspaces can use **Load starter examples** in Knowledge base. Automated evaluations can pass `starter_examples=false` at demo login for an empty workspace. Set the flag to `false` to disable new and existing demo access.
 
 1. Open **Knowledge base** and write or paste a support article describing your product, supported categories, and routing guidance. Save it.
 2. Create a separate article, check **Use as urgency policy**, and define when your team assigns `low`, `normal`, `high`, or `urgent`. Save it. No default policy is fabricated.

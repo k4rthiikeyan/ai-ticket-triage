@@ -1,5 +1,48 @@
 import { test, expect } from "@playwright/test";
 
+test("starter examples survive reload and a demo ends on logout or inactivity", async ({
+  page,
+}) => {
+  const serverErrors: string[] = [];
+  page.on("response", (response) => {
+    if (response.status() >= 500 && response.url().includes("/api/"))
+      serverErrors.push(response.url());
+  });
+  await page.clock.install();
+  await page.goto("/");
+  await page.getByRole("button", { name: "Try the demo", exact: true }).click();
+  await page
+    .getByRole("navigation")
+    .getByRole("link", { name: "All tickets", exact: false })
+    .click();
+  await expect(
+    page.getByRole("link", { name: "Example — Refund has not arrived" }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("link", { name: "Example — Refund has not arrived" }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Knowledge base", exact: true }).click();
+  await expect(
+    page.getByText("6 ACTIVE ARTICLES", { exact: false }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "End demo & delete data", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Try the demo", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Try the demo", exact: true }).click();
+  await expect(
+    page.getByText("Your tickets and knowledge are isolated", { exact: false }),
+  ).toBeVisible();
+  await page.clock.fastForward("31:00");
+  await expect(
+    page.getByRole("button", { name: "Try the demo", exact: true }),
+  ).toBeVisible();
+  expect(serverErrors).toEqual([]);
+});
+
 test("separate demo browsers cannot see each other's ticket", async ({
   browser,
 }) => {

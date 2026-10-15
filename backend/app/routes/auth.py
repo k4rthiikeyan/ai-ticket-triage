@@ -8,7 +8,7 @@ from ..config import DEMO_USERNAME, DEMO_PASSWORD
 from ..models import Admin, LoginSession, Workspace, now
 from ..schemas import LoginBody
 from ..dependencies import DB, authenticated, token_hash
-from ..services.workspaces import create_demo_workspace
+from ..services.workspaces import create_demo_workspace, delete_workspace
 from ..services.usage import consume
 
 
@@ -44,15 +44,17 @@ def register(app):
                 workspace = prior.id
             else:
                 consume(session, 'demo:new:global', 40, 86400)
-                workspace = create_demo_workspace(session, settings)
+                workspace = create_demo_workspace(session, settings, body.starter_examples)
         token = secrets.token_urlsafe(32)
         csrf = secrets.token_urlsafe(32)
+        is_demo = admin.username == DEMO_USERNAME
+        expires_at = now() + (timedelta(minutes=settings.demo_idle_minutes) if is_demo else timedelta(hours=settings.session_hours))
         session.add(LoginSession(token_hash=token_hash(token), admin_id=admin.id, csrf_token=csrf,
                                  workspace_id=workspace,
-                                 expires_at=now() + timedelta(hours=settings.session_hours)))
+                                 expires_at=expires_at))
         session.commit()
         response.set_cookie('triage_session', token, httponly=True, secure=settings.cookie_secure,
-                            samesite='strict', path='/api', max_age=settings.session_hours * 3600)
+                            samesite='strict', path='/api', max_age=None if is_demo else settings.session_hours * 3600)
         return {'username': admin.username, 'csrf_token': csrf, 'is_demo': admin.username == DEMO_USERNAME}
 
 
@@ -64,7 +66,10 @@ def register(app):
 
     @router.post('/auth/logout')
     def logout(response: Response, session: DB, login: Annotated[LoginSession, Depends(authenticated)]):
-        session.delete(login)
+        if session.info.get('is_demo'):
+            delete_workspace(session, login.workspace_id)
+        else:
+            session.delete(login)
         session.commit()
         response.delete_cookie('triage_session', path='/api')
         return {'ok': True}

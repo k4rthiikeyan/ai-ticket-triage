@@ -38,7 +38,7 @@ def register(app):
                                 'ai_remaining_today': max(0, min(settings.demo_ai_daily_limit - used(session, f'ai:workspace:{workspace_id(session)}'),
                                                                settings.ai_daily_limit - used(session, 'ai:global:day'))),
                                 'tickets': settings.demo_ticket_limit,
-                                'articles': settings.demo_article_limit, 'workspace_hours': settings.demo_workspace_hours},
+                                'articles': settings.demo_article_limit, 'idle_minutes': settings.demo_idle_minutes},
                 'busy': bool(session.exec(select(Job).where(Job.workspace_id == workspace_id(session), Job.status.in_(['queued', 'running']), Job.created_at >= cutoff)).first()),
                 'jobs': session.exec(select(Job).where(Job.workspace_id == workspace_id(session)).order_by(Job.created_at.desc()).limit(5)).all()}
 

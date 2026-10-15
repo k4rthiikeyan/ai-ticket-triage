@@ -66,6 +66,9 @@ def test_full_workflow_and_restart_with_real_postgres():
             assert second.get('/api/jobs/' + visitor_job['id']).status_code == 404
             assert second.get('/api/articles').json() == []
             assert not second.get('/api/system').json()['index_ready']
+            assert first.post('/api/auth/logout').status_code == 200
+            assert first.get('/api/auth/me').status_code == 401
+            assert other.post('/api/knowledge/search', json={'query': 'Duplicate charge'}).json()['items']
             with Session(restarted.state.engine) as session:
                 session.add(Job(id='other-instance', kind='reindex', status='running'))
                 session.commit()

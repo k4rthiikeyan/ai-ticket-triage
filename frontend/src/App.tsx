@@ -39,6 +39,7 @@ import { TicketsPage } from "./TicketsPage";
 import { TicketPage } from "./TicketPage";
 import { KnowledgePage } from "./KnowledgePage";
 import { SettingsPage } from "./SettingsPage";
+import { useDemoActivity } from "./useDemoActivity";
 export default function App() {
   const [user, setUser] = useState<string | null>(null),
     [isDemo, setIsDemo] = useState(false),
@@ -55,6 +56,10 @@ export default function App() {
     [lastJob, setLastJob] = useState(""),
     [createOpen, setCreateOpen] = useState(false);
   const location = useLocation();
+  useDemoActivity(
+    Boolean(user && isDemo),
+    system?.demo_limits.idle_minutes ?? 30,
+  );
   const navigate = useNavigate();
   const refresh = useCallback(async () => {
     const [t, s, d] = await Promise.all([
@@ -289,12 +294,16 @@ export default function App() {
                 <ShieldCheck size={17} />
                 <span>
                   Your tickets and knowledge are isolated from other visitors.
-                  This workspace expires after{" "}
-                  {system?.demo_limits.workspace_hours ?? 24} hours.{" "}
+                  Ending the demo deletes its data and embeddings. An abandoned
+                  session expires after {system?.demo_limits.idle_minutes ?? 30}{" "}
+                  minutes of inactivity.{" "}
                   {system?.demo_limits.ai_remaining_today ?? "—"} free AI
                   requests available today; indexing, search, and triage share
                   this allowance. Use non-sensitive examples.
                 </span>
+                <button className="button small-button" onClick={logout}>
+                  End demo &amp; delete data
+                </button>
               </div>
             )}
             <ErrorBox message={workspaceError} />

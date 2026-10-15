@@ -15,7 +15,7 @@ import { Loading, PageHeading, TicketTable } from "./ui";
 import { useWorkspace } from "./workspace";
 
 export function DashboardPage() {
-  const { dashboard, system, newTicket } = useWorkspace();
+  const { dashboard, system, newTicket, isDemo } = useWorkspace();
   if (!dashboard) return <Loading />;
   const metrics = [
     {
@@ -87,7 +87,9 @@ export function DashboardPage() {
           <p>
             {dashboard.total === 0
               ? "Add your support articles and urgency policy, rebuild the index, then create a ticket and run triage."
-              : "Retrieve relevant knowledge. Inspect the evidence. Make the final call."}
+              : isDemo
+                ? "Starter examples are labelled Example. Build the knowledge index, open a ticket, run triage, and inspect the evidence before confirming."
+                : "Retrieve relevant knowledge. Inspect the evidence. Make the final call."}
           </p>
         </div>
         <Link to="/knowledge" className="button">

@@ -5,9 +5,10 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlmodel import Session, select
 from sqlalchemy import delete
-from .models import AppState, Article, Category, Job, RecommendationRun, Ticket, AuditEvent, KnowledgeChunk, now
+from .models import AppState, Article, Category, Job, RecommendationRun, Ticket, AuditEvent, KnowledgeChunk, Workspace, now
 from .rag import run_rag, run_rules
 from .services.usage import BudgetedGateway
+from .services.workspaces import cleanup_expired
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ def enqueue(app, kind: str, ticket_id=None, workspace=1, is_demo=False):
         with Session(app.state.engine) as session:
             # A row lock serializes admission across Vercel instances sharing Postgres.
             session.exec(select(AppState).where(AppState.id == 1).with_for_update()).one()
+            member = session.exec(select(Workspace).where(Workspace.id == workspace).with_for_update()).first()
+            if not member or (member.expires_at and member.expires_at <= now()):
+                raise HTTPException(401, 'Your demo session ended. Sign in again to start a fresh workspace.')
             state = session.get(AppState, workspace)
             cutoff = now() - timedelta(seconds=app.state.settings.job_timeout + app.state.settings.inference_timeout + 30)
             active = session.exec(select(Job).where(Job.status.in_(['queued', 'running']))).all()
@@ -73,7 +77,10 @@ def enqueue(app, kind: str, ticket_id=None, workspace=1, is_demo=False):
     # Complete work inside the request: serverless instances can stop after a response.
     execute(app, result['id'], snapshot)
     with Session(app.state.engine) as session:
-        return session.get(Job, result['id']).model_dump(mode='json')
+        completed = session.get(Job, result['id'])
+        if completed is None:
+            raise HTTPException(401, 'Your demo session ended and its data was cleared.')
+        return completed.model_dump(mode='json')
 
 
 def execute(app, job_id, snapshot):
@@ -156,3 +163,6 @@ def execute(app, job_id, snapshot):
     finally:
         with app.state.job_lock:
             app.state.busy = False
+        with Session(engine) as session:
+            cleanup_expired(session)
+            session.commit()

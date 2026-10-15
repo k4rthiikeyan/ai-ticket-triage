@@ -16,7 +16,7 @@ import type { Article, Job } from "./types";
 
 import { KnowledgeSearch } from "./KnowledgeSearch";
 export function KnowledgePage() {
-  const { system, refresh, startJob, lastJob } = useWorkspace();
+  const { system, refresh, startJob, lastJob, isDemo } = useWorkspace();
   const [articles, setArticles] = useState<Article[] | null>(null),
     [selected, setSelected] = useState<string | null>(null),
     [title, setTitle] = useState(""),
@@ -128,6 +128,24 @@ export function KnowledgePage() {
       setBusy(false);
     }
   }
+  async function loadExamples() {
+    setBusy(true);
+    setError("");
+    try {
+      await post("/demo/examples");
+      const loaded = await api<Article[]>("/articles");
+      setArticles(loaded);
+      setSelected(loaded[0]?.id ?? "new");
+      await refresh();
+      setSuccess(
+        "Starter examples loaded. Rebuild the index, then open an example ticket and run triage.",
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <>
       <PageHeading
@@ -164,7 +182,9 @@ export function KnowledgePage() {
           <p>
             {system?.index_ready
               ? `Indexed version ${system.indexed_version} · ${system.embedding_model}`
-              : "Add at least one support article and an urgency policy, then rebuild. Rules and manual decisions are available now."}
+              : articles?.some((article) => article.id.startsWith("starter-"))
+                ? "Starter guidance and urgency policy are loaded. Click Rebuild index, then open an example ticket and run triage."
+                : "Add at least one support article and an urgency policy, then rebuild. Rules and manual decisions are available now."}
           </p>
         </div>
         <span className="subtle-label">
@@ -184,6 +204,15 @@ export function KnowledgePage() {
           <BookOpen size={17} />
           Your library is empty. Write your own support guidance below, then add
           a separate article marked as an urgency policy.
+          {isDemo && (
+            <button
+              className="button small-button"
+              disabled={busy}
+              onClick={loadExamples}
+            >
+              Load starter examples
+            </button>
+          )}
         </div>
       )}
       <div className="knowledge-grid">

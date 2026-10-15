@@ -11,6 +11,7 @@ class StrictModel(BaseModel):
 class LoginBody(StrictModel):
     username: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=200)
+    starter_examples: bool = True
 
 
 class TicketCreate(StrictModel):

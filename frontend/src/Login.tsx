@@ -110,7 +110,10 @@ export function Login({
           {demo?.enabled && demo.username && demo.password && (
             <section className="demo-access" aria-label="Public demo access">
               <strong>Explore the public demo</strong>
-              <p>No account needed. Try the workspace for yourself.</p>
+              <p>
+                Start with six example articles and three tickets, then try your
+                own.
+              </p>
               <dl>
                 <div>
                   <dt>Username</dt>
@@ -137,7 +140,8 @@ export function Login({
               </button>
               <p className="demo-access-note">
                 Your own temporary workspace. No other visitor can see your
-                tickets or knowledge. Free AI usage limits apply.
+                tickets or knowledge. End the demo to delete its data and
+                embeddings. Free AI usage limits apply.
               </p>
             </section>
           )}

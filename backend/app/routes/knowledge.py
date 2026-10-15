@@ -9,11 +9,20 @@ from ..jobs import enqueue, readable_error
 from ..rag import embed_query
 from ..services.workspaces import workspace_id, state_for, enforce_size
 from ..services.usage import BudgetedGateway
+from ..services.examples import load_examples
 
 
 def register(app):
     settings = app.state.settings
     router = APIRouter(prefix="/api", dependencies=[Depends(authenticated)])
+
+    @router.post('/demo/examples')
+    def starter_examples(session: DB):
+        if not session.info.get('is_demo'):
+            raise HTTPException(403, 'Starter examples are only available in temporary demo workspaces.')
+        result = load_examples(session, workspace_id(session))
+        session.commit()
+        return result
 
     @router.get('/articles')
     def articles(session: DB):

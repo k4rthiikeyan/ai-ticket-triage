@@ -15,6 +15,7 @@ from .models import Job, now
 from .seed import seed
 from .rag import OpenRouterGateway, VectorStore
 from .routes import auth, system, taxonomy, tickets, knowledge
+from .services.workspaces import shorten_legacy_sessions, cleanup_expired
 
 
 def create_app(settings: Settings | None = None, gateway=None, store=None, frontend_dir=None):
@@ -27,6 +28,8 @@ def create_app(settings: Settings | None = None, gateway=None, store=None, front
             migrate(engine)
         seed(engine, settings)
         with Session(engine) as session:
+            shorten_legacy_sessions(session, settings)
+            cleanup_expired(session)
             cutoff = now() - timedelta(seconds=settings.job_timeout + settings.inference_timeout + 30)
             for job in session.exec(select(Job).where(Job.status.in_(['queued', 'running']), Job.created_at < cutoff)).all():
                 job.status = 'failed'
